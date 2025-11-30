@@ -1,0 +1,165 @@
+import { ref, computed } from 'vue';
+import { 
+  DEFAULT_SERIES_INSTANCE_UIDS, 
+  DEFAULT_STUDY_INSTANCE_UID,
+  DEFAULT_PHASE,
+  DEFAULT_MODULE,
+  DEFAULT_SUB_MODULE
+} from '../config/appConfig.js';
+
+/**
+ * 应用状态管理 Composable
+ * 管理全局应用状态和事件处理
+ * 
+ * @param {Object} seriesInstanceUIDs - 系列实例 UID 映射对象
+ * @param {Ref<string>} studyInstanceUIDParam - 研究实例 UID 引用
+ * @returns {Object} 应用状态和方法
+ */
+export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) {
+  // ========== 状态管理 ==========
+  const currentPhase = ref(DEFAULT_PHASE);
+  const currentModule = ref(DEFAULT_MODULE);
+  const currentSubModule = ref(DEFAULT_SUB_MODULE);
+  const currentSliceIndex = ref(-1);
+  const currentGeoData = ref(null);
+  const mainViewerRef = ref(null);
+
+  // ========== 配置处理 ==========
+  const seriesUIDs = seriesInstanceUIDs || DEFAULT_SERIES_INSTANCE_UIDS;
+
+  /**
+   * 根据当前期相计算系列实例 UID
+   */
+  const seriesInstanceUID = computed(() => {
+    return seriesUIDs[currentPhase.value] || seriesUIDs[DEFAULT_PHASE];
+  });
+  
+  /**
+   * 研究实例 UID
+   */
+  const studyInstanceUID = computed(() => {
+    return studyInstanceUIDParam?.value || DEFAULT_STUDY_INSTANCE_UID;
+  });
+
+  // ========== 事件处理函数 ==========
+  
+  /**
+   * 更新几何数据
+   */
+  function handleGeoDataUpdate(data) {
+    currentGeoData.value = data;
+  }
+
+  /**
+   * 处理期相变化
+   */
+  function handlePhaseChange(phase) {
+    currentPhase.value = phase;
+  }
+
+  /**
+   * 处理模块变化
+   * @param {string|Object} mod - 模块名称或包含模块信息的对象
+   */
+  function handleModuleChange(mod) {
+    if (typeof mod === 'object' && mod.module) {
+      currentModule.value = mod.module;
+    } else {
+      currentModule.value = mod;
+    }
+  }
+
+  /**
+   * 处理子模块变化
+   */
+  function handleSubModuleChange(sub) {
+    currentSubModule.value = sub;
+  }
+
+  /**
+   * 处理切片索引变化
+   */
+  // 切片视图功能已移除（保留 currentSliceIndex 供可能的内部使用）
+
+  /**
+   * 处理平面级别变化
+   * 注意：当前使用CrosshairsViewer，暂不支持平面定位功能
+   */
+  function handlePlaneLevelChange(level) {
+    console.log('Plane level change:', level);
+  }
+
+  /**
+   * 开始测量功能
+   * 注意：当前使用CrosshairsViewer，测量功能需要在工具组中激活
+   */
+  function handleStartMeasure() {
+    console.log('Start measure');
+  }
+
+  /**
+   * 切换虚拟瓣膜显示
+   */
+  function handleToggleVirtualValve() {
+    console.log('Toggle virtual valve');
+  }
+
+  /**
+   * 更新瓣膜透明度
+   */
+  function handleUpdateValveOpacity(val) {
+    console.log('Update valve opacity:', val);
+  }
+
+  /**
+   * 更新瓣膜旋转角度
+   */
+  function handleUpdateValveRotation(val) {
+    console.log('Update valve rotation:', val);
+  }
+
+  /**
+   * 处理定位平面
+   */
+  function handleLocatePlane(analysisType) {
+    if (mainViewerRef.value) {
+      mainViewerRef.value.locatePlane(analysisType);
+    }
+  }
+
+  /**
+   * 处理恢复MPR
+   */
+  function handleRestoreMPR() {
+    if (mainViewerRef.value) {
+      mainViewerRef.value.restoreMPR();
+    }
+  }
+
+  // ========== 返回值 ==========
+  return {
+    // 状态
+    currentPhase,
+    currentModule,
+    currentSubModule,
+    currentSliceIndex,
+    currentGeoData,
+    mainViewerRef,
+    seriesInstanceUID,
+    studyInstanceUID,
+    // 事件处理
+    handleGeoDataUpdate,
+    handlePhaseChange,
+    handleModuleChange,
+    handleSubModuleChange,
+    
+    handlePlaneLevelChange,
+    handleStartMeasure,
+    handleToggleVirtualValve,
+    handleUpdateValveOpacity,
+    handleUpdateValveRotation,
+    handleLocatePlane,
+    handleRestoreMPR
+  };
+}
+

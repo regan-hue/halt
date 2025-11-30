@@ -1,0 +1,9 @@
+{
+  "utils.clean_job": "Passed",
+  "preprocessing.main": "Passed",
+  "convert_manual_label": "Passed",
+  "segmentonnx.main": "Passed",
+  "measure.main": "Passed",
+  "make_stl": "Pending",
+  "visualization": "Passed"
+}
