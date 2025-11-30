@@ -2,7 +2,10 @@
   <div class="main-viewer">
     <div class="viewport-grid">
       <div class="viewport-container">
-        <div class="viewport-label">AXIAL</div>
+        <div class="viewport-header">
+          <div class="viewport-label">AXIAL</div>
+          <div class="viewport-indicator" :style="{ backgroundColor: getLabelColor('AXIAL') }"></div>
+        </div>
         <div class="viewport-element" ref="viewport1"></div>
       </div>
       <div class="viewport-container stl-viewport">
@@ -15,11 +18,17 @@
         <div v-if="stlError" class="stl-error">{{ stlError }}</div>
       </div>
       <div class="viewport-container">
-        <div class="viewport-label">CORONAL</div>
+        <div class="viewport-header">
+          <div class="viewport-label">CORONAL</div>
+          <div class="viewport-indicator" :style="{ backgroundColor: getLabelColor('CORONAL') }"></div>
+        </div>
         <div class="viewport-element" ref="viewport3"></div>
       </div>
       <div class="viewport-container">
-        <div class="viewport-label">SAGITTAL</div>
+        <div class="viewport-header">
+          <div class="viewport-label">SAGITTAL</div>
+          <div class="viewport-indicator" :style="{ backgroundColor: getLabelColor('SAGITTAL') }"></div>
+        </div>
         <div class="viewport-element" ref="viewport2"></div>
       </div>
     </div>
@@ -57,6 +66,22 @@ const viewport1 = ref(null)
 const viewport2 = ref(null)
 const viewport3 = ref(null)
 const stlViewport = ref(null)
+
+// 根据viewport类型获取标签颜色，与十字交叉线颜色匹配
+const getLabelColor = (type) => {
+  switch (type) {
+    case 'AXIAL': return '#ff0000'; // 红色
+    case 'SAGITTAL': return '#ffff00'; // 黄色
+    case 'CORONAL': return '#0000ff'; // 蓝色
+    default: return '#00e5ff';
+  }
+}
+
+// 获取对应的text-shadow
+const getLabelShadow = (type) => {
+  const color = getLabelColor(type);
+  return `0 0 8px ${color}80`; // 添加透明度
+}
 
 onMounted(async () => {
   await nextTick()
@@ -215,14 +240,10 @@ watch(() => props.currentPhase, async (newPhase, oldPhase) => {
 }
 
 .viewport-label {
-  position: absolute;
-  top: 8px;
-  left: 8px;
   color: #00e5ff;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 1px;
-  z-index: 10;
   background: linear-gradient(135deg, rgba(0, 39, 77, 0.9) 0%, rgba(0, 77, 128, 0.85) 100%);
   padding: 4px 12px;
   border-radius: 4px;
@@ -231,6 +252,25 @@ watch(() => props.currentPhase, async (newPhase, oldPhase) => {
   box-shadow: 0 2px 10px rgba(0, 229, 255, 0.2);
   text-transform: uppercase;
   text-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+  margin-right: 8px;
+}
+
+.viewport-header {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  z-index: 10;
+}
+
+.viewport-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+  flex-shrink: 0;
 }
 
 .viewport-element {

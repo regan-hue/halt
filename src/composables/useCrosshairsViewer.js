@@ -328,7 +328,14 @@ export function useCrosshairsViewer(props) {
       if (isNewToolGroup) {
         // 添加 Crosshairs 工具
         addTool(CrosshairsTool)
-        toolGroup.addTool(CrosshairsTool.toolName)
+        toolGroup.addTool(CrosshairsTool.toolName, {
+          getReferenceLineColor: (viewportId) => {
+            if (viewportId.includes('axial')) return 'rgb(255, 0, 0)';      // 红色
+            if (viewportId.includes('sagittal')) return 'rgb(255, 255, 0)'; // 黄色
+            if (viewportId.includes('coronal')) return 'rgb(0, 0, 255)';   // 蓝色
+            return 'rgb(200, 200, 200)'; // 默认灰色
+          }
+        });
         toolGroup.setToolActive(CrosshairsTool.toolName, {
           bindings: [{ mouseButton: ToolsEnums.MouseBindings.Primary }],
         })
@@ -540,26 +547,37 @@ export function useCrosshairsViewer(props) {
    * 恢复到初始MPR位置
    */
   function restoreMPR() {
-    if (!renderingEngine || !viewportIds || !initialCameraPositions) {
-      console.error('无法恢复MPR: 渲染引擎或初始位置未初始化');
+    if (!renderingEngine || !viewportIds) {
+      console.error('无法恢复MPR: 渲染引擎未初始化');
       return;
     }
 
     try {
-      Object.keys(initialCameraPositions).forEach(viewName => {
+      // 重置所有viewport的相机到默认状态
+      Object.keys(viewportIds).forEach(viewName => {
         const viewport = renderingEngine.getViewport(viewportIds[viewName]);
-        if (viewport && initialCameraPositions[viewName]) {
-          viewport.setCamera(initialCameraPositions[viewName]);
+        if (viewport) {
+          const resetPan = true;
+          const resetZoom = true;
+          const resetToCenter = true;
+          const resetRotation = true;
+          viewport.resetCamera({
+            resetPan,
+            resetZoom,
+            resetToCenter,
+            resetRotation,
+          });
         }
       });
+      
       renderingEngine.renderViewports([
         viewportIds.axial,
         viewportIds.sagittal,
         viewportIds.coronal,
       ]);
-      console.log('已恢复到初始MPR位置');
+      console.log('已重置MPR相机到默认状态');
     } catch (err) {
-      console.error('恢复MPR位置失败:', err);
+      console.error('重置MPR相机失败:', err);
     }
   }
 
