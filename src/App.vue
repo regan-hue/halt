@@ -34,7 +34,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useApp } from './composables/useApp.js';
 import { getAppConfig } from './config/appConfig.js';
 import Sidebar from './components/Sidebar.vue';
@@ -66,7 +66,8 @@ const {
   handleUpdateValveOpacity,
   handleUpdateValveRotation,
   handleLocatePlane,
-  handleRestoreMPR
+  handleRestoreMPR,
+  loadAllGeometricData
 } = useApp(config.seriesInstanceUIDs, studyInstanceUID);
 
 // 视图状态管理
@@ -97,6 +98,11 @@ function handleRenameViewState(stateId, newName) {
     mainViewerRef.value.renameViewState(stateId, newName);
   }
 }
+
+// 应用初始化时加载所有几何数据
+onMounted(() => {
+  loadAllGeometricData();
+});
 </script>
 
 <style>

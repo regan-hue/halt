@@ -270,12 +270,12 @@
         <div v-if="geoType !== 'depth'" class="analysis-content">
             <h4>📊 测量参数</h4>
             <div class="data-grid">
-               <div class="data-row"><span>周长</span><span class="data-value">{{ formatNum(geometricData?.perimeter) }} mm</span></div>
-               <div class="data-row"><span>面积 (Area)</span><span class="data-value">{{ formatNum(geometricData?.area) }} mm²</span></div>
-               <div class="data-row"><span>最长径 (Dmax)</span><span class="data-value">{{ formatNum(geometricData?.max_dist) }} mm</span></div>
-               <div class="data-row"><span>最短径 (Dmin)</span><span class="data-value">{{ formatNum(geometricData?.min_dist) }} mm</span></div>
-               <div class="data-row highlight"><span>周长衍生直径 (PED)</span><span class="data-value">{{ formatNum(geometricData?.PED) }} mm</span></div>
-               <div class="data-row"><span>面积衍生直径 (AED)</span><span class="data-value">{{ formatNum(geometricData?.AED) }} mm</span></div>
+               <div class="data-row"><span>周长</span><span class="data-value">{{ formatNum(geometricData?.[geoType]?.perimeter) }} mm</span></div>
+               <div class="data-row"><span>面积 (Area)</span><span class="data-value">{{ formatNum(geometricData?.[geoType]?.area) }} mm²</span></div>
+               <div class="data-row"><span>最长径 (Dmax)</span><span class="data-value">{{ formatNum(geometricData?.[geoType]?.max_dist) }} mm</span></div>
+               <div class="data-row"><span>最短径 (Dmin)</span><span class="data-value">{{ formatNum(geometricData?.[geoType]?.min_dist) }} mm</span></div>
+               <div class="data-row highlight"><span>周长衍生直径 (PED)</span><span class="data-value">{{ formatNum(geometricData?.[geoType]?.PED) }} mm</span></div>
+               <div class="data-row"><span>面积衍生直径 (AED)</span><span class="data-value">{{ formatNum(geometricData?.[geoType]?.AED) }} mm</span></div>
             </div>
             
             <div class="control-buttons mt-20">
@@ -363,22 +363,96 @@
         </div>
 
         <div class="analysis-content mt-10">
-             <h4>三、人工瓣膜支架评估</h4>
-             <p><strong>瓣膜植入深度 (mm)</strong></p>
-             <div class="info-grid">
-                 <div>NC: {{ implantDepth.NC }}</div>
-                 <div>LC: {{ implantDepth.LC }}</div>
-                 <div>RC: {{ implantDepth.RC }}</div>
-             </div>
-             
-             <div class="form-item mt-10">
-                 <label>形态改变评估</label>
-                 <select v-model="morphologyChange">
-                     <option value="none">无形态改变</option>
-                     <option value="exists">存在形态改变</option>
-                     <option value="unfilled">未填写</option>
-                 </select>
-             </div>
+            <h4>二、瓣叶功能评估</h4>
+            
+            <p><strong>HALT状态与分级</strong></p>
+            <div class="info-grid">
+                <div>状态: {{ haltResult === 'none' ? '无' : haltResult === 'exists' ? '有' : '难以判定' }}</div>
+            </div>
+            <div v-if="haltResult === 'exists'" class="info-grid mt-5">
+                <div>LC分级: {{ haltDetails.LC }}</div>
+                <div>RC分级: {{ haltDetails.RC }}</div>
+                <div>NC分级: {{ haltDetails.NC }}</div>
+            </div>
+
+            <p class="mt-10"><strong>SFD分析</strong></p>
+            <div class="info-grid">
+                <div>状态: {{ sfdResult === 'none' ? '无' : sfdResult === 'exists' ? '有' : '难以判定' }}</div>
+            </div>
+            <div v-if="sfdResult === 'exists'" class="info-grid mt-5">
+                <div>LC: {{ sfdDetails.LC ? '是' : '否' }}</div>
+                <div>RC: {{ sfdDetails.RC ? '是' : '否' }}</div>
+                <div>NC: {{ sfdDetails.NC ? '是' : '否' }}</div>
+            </div>
+
+            <p class="mt-10"><strong>PFD分析</strong></p>
+            <div class="info-grid">
+                <div>状态: {{ pfdResult === 'none' ? '无' : pfdResult === 'exists' ? '有' : '难以判定' }}</div>
+                <div v-if="pfdResult === 'exists'">最大厚度: {{ pfdThickness }} mm</div>
+            </div>
+        </div>
+
+        <div class="analysis-content mt-10">
+            <h4>三、几何形态评估</h4>
+            
+            <div v-if="geometricData?.inflow">
+                <p><strong>流入平面 (Inflow)</strong></p>
+                <div class="data-grid">
+                    <div class="data-row"><span>周长</span><span class="data-value">{{ formatNum(geometricData.inflow.perimeter) }} mm</span></div>
+                    <div class="data-row"><span>面积 (Area)</span><span class="data-value">{{ formatNum(geometricData.inflow.area) }} mm²</span></div>
+                    <div class="data-row"><span>最长径 (Dmax)</span><span class="data-value">{{ formatNum(geometricData.inflow.max_dist) }} mm</span></div>
+                    <div class="data-row"><span>最短径 (Dmin)</span><span class="data-value">{{ formatNum(geometricData.inflow.min_dist) }} mm</span></div>
+                    <div class="data-row highlight"><span>周长衍生直径 (PED)</span><span class="data-value">{{ formatNum(geometricData.inflow.PED) }} mm</span></div>
+                    <div class="data-row"><span>面积衍生直径 (AED)</span><span class="data-value">{{ formatNum(geometricData.inflow.AED) }} mm</span></div>
+                </div>
+            </div>
+
+            <div v-if="geometricData?.nadir" class="mt-10">
+                <p><strong>最低点平面 (Nadir)</strong></p>
+                <div class="data-grid">
+                    <div class="data-row"><span>周长</span><span class="data-value">{{ formatNum(geometricData.nadir.perimeter) }} mm</span></div>
+                    <div class="data-row"><span>面积 (Area)</span><span class="data-value">{{ formatNum(geometricData.nadir.area) }} mm²</span></div>
+                    <div class="data-row"><span>最长径 (Dmax)</span><span class="data-value">{{ formatNum(geometricData.nadir.max_dist) }} mm</span></div>
+                    <div class="data-row"><span>最短径 (Dmin)</span><span class="data-value">{{ formatNum(geometricData.nadir.min_dist) }} mm</span></div>
+                    <div class="data-row highlight"><span>周长衍生直径 (PED)</span><span class="data-value">{{ formatNum(geometricData.nadir.PED) }} mm</span></div>
+                    <div class="data-row"><span>面积衍生直径 (AED)</span><span class="data-value">{{ formatNum(geometricData.nadir.AED) }} mm</span></div>
+                </div>
+            </div>
+
+            <div v-if="geometricData?.commissure" class="mt-10">
+                <p><strong>交接平面 (Commissure)</strong></p>
+                <div class="data-grid">
+                    <div class="data-row"><span>周长</span><span class="data-value">{{ formatNum(geometricData.commissure.perimeter) }} mm</span></div>
+                    <div class="data-row"><span>面积 (Area)</span><span class="data-value">{{ formatNum(geometricData.commissure.area) }} mm²</span></div>
+                    <div class="data-row"><span>最长径 (Dmax)</span><span class="data-value">{{ formatNum(geometricData.commissure.max_dist) }} mm</span></div>
+                    <div class="data-row"><span>最短径 (Dmin)</span><span class="data-value">{{ formatNum(geometricData.commissure.min_dist) }} mm</span></div>
+                    <div class="data-row highlight"><span>周长衍生直径 (PED)</span><span class="data-value">{{ formatNum(geometricData.commissure.PED) }} mm</span></div>
+                    <div class="data-row"><span>面积衍生直径 (AED)</span><span class="data-value">{{ formatNum(geometricData.commissure.AED) }} mm</span></div>
+                </div>
+            </div>
+
+            <p class="mt-10"><strong>瓣膜植入深度 (mm)</strong></p>
+            <div class="info-grid">
+                <div>NC: {{ formatNum(implantDepth.NC) }}</div>
+                <div>LC: {{ formatNum(implantDepth.LC) }}</div>
+                <div>RC: {{ formatNum(implantDepth.RC) }}</div>
+            </div>
+        </div>
+
+        <div class="analysis-content mt-10">
+            <h4>四、交接对齐</h4>
+            
+            <p><strong>交接对齐角度</strong></p>
+            <div class="data-grid">
+                <div class="data-row"><span>RCA to RCC/LCC</span><span class="data-value">{{ formatNum(alignmentAngles.RCA_RCC_LCC) }}°</span></div>
+                <div class="data-row"><span>RCA to LCC/NCC</span><span class="data-value">{{ formatNum(alignmentAngles.RCA_LCC_NCC) }}°</span></div>
+                <div class="data-row"><span>RCA to NCC/RCC</span><span class="data-value">{{ formatNum(alignmentAngles.RCA_NCC_RCC) }}°</span></div>
+            </div>
+
+            <p class="mt-10"><strong>形态改变评估</strong></p>
+            <div class="info-grid">
+                <div>评估结果: {{ morphologyChange === 'none' ? '无形态改变' : morphologyChange === 'exists' ? '存在形态改变' : '未填写' }}</div>
+            </div>
         </div>
         
         <button class="primary-btn mt-20" @click="exportReport">导出报告</button>

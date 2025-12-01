@@ -149,6 +149,41 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
   }
 
   /**
+   * 加载所有几何平面数据
+   */
+  async function loadAllGeometricData() {
+    try {
+      const phaseFolder = currentPhase.value === '收缩期' ? 'shousuoqi' : 'shuzhangqi';
+      const response = await fetch(`/data/${phaseFolder}/measurement.json`);
+      const data = await response.json();
+      
+      // 提取几何数据的辅助函数
+      const extractPlaneData = (planeData) => {
+        if (!planeData) return null;
+        return {
+          perimeter: planeData.perimeter,
+          area: planeData.area,
+          PED: planeData.PED,
+          AED: planeData.AED,
+          max_dist: planeData.max_dist,
+          min_dist: planeData.min_dist,
+          average_dist: planeData.average_dist
+        };
+      };
+      
+      // 更新为包含所有平面数据的对象
+      currentGeoData.value = {
+        inflow: extractPlaneData(data['Stent_Frame_Base_plane']),
+        nadir: extractPlaneData(data['Stent_Frame_base_up_1.0_plane']),
+        commissure: extractPlaneData(data['Stent_Frame_Crown_Frame_plane'])
+      };
+      
+    } catch (error) {
+      console.error('Failed to load geometric data:', error);
+    }
+  }
+
+  /**
    * 处理定位平面
    */
   async function handleLocatePlane(analysisType) {
@@ -165,35 +200,18 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
     } else if (analysisType === 'pfd') {
       targetPlaneKey = 'Stent_Frame_base_up_1.0_plane';
     } else if (analysisType === 'inflow') {
-      targetPlaneKey = 'Stent_Frame_base_up_0.5_plane';
+      targetPlaneKey = 'Stent_Frame_Base_plane';
     } else if (analysisType === 'nadir') {
       targetPlaneKey = 'Stent_Frame_base_up_1.0_plane';
     } else if (analysisType === 'commissure') {
-      targetPlaneKey = 'Stent_Frame_base_up_1.5_plane';
+      targetPlaneKey = 'Stent_Frame_Crown_Frame_plane';
     } else {
       console.error('未知的分析类型:', analysisType);
       return;
     }
     
-    // 读取几何数据
-    try {
-      const response = await fetch('/data/shousuoqi/measurement.json');
-      const data = await response.json();
-      const planeData = data[targetPlaneKey];
-      if (planeData) {
-        currentGeoData.value = {
-          perimeter: planeData.perimeter,
-          area: planeData.area,
-          PED: planeData.PED,
-          AED: planeData.AED,
-          max_dist: planeData.max_dist,
-          min_dist: planeData.min_dist,
-          average_dist: planeData.average_dist
-        };
-      }
-    } catch (error) {
-      console.error('Failed to load geometric data:', error);
-    }
+    // 加载所有几何数据
+    await loadAllGeometricData();
   }
 
   /**
@@ -230,7 +248,8 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
     handleUpdateValveOpacity,
     handleUpdateValveRotation,
     handleLocatePlane,
-    handleRestoreMPR
+    handleRestoreMPR,
+    loadAllGeometricData
   };
 }
 
