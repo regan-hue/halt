@@ -455,7 +455,7 @@
             </div>
         </div>
         
-        <button class="primary-btn mt-20" @click="exportReport">导出报告</button>
+        <button class="primary-btn mt-20" @click="exportReportPDF">📄 导出PDF报告</button>
         <div class="export-options mt-10">
           <button class="secondary-btn" @click="exportReportJSON">导出为JSON</button>
           <button class="secondary-btn" @click="exportReportText">导出为文本</button>
@@ -468,7 +468,7 @@
 <script setup>
 import { ref } from 'vue';
 import { useSidebar } from '../composables/useSidebar.js';
-import { collectReportData, exportReportJSON as exportJSON, exportReportText as exportTXT } from '../utils/reportExporter.js';
+import { collectReportData, exportReportPDF as exportPDF, exportReportJSON as exportJSON, exportReportText as exportTXT } from '../utils/reportExporter.js';
 
 const props = defineProps(['initialPhase', 'geometricData', 'savedViewStates']);
 const emit = defineEmits([
@@ -558,8 +558,8 @@ function confirmRename() {
   }
 }
 
-function exportReport() {
-  // 默认导出为JSON
+function exportReportPDF() {
+  // 导出为PDF
   const reportData = collectReportData({
     currentPhase,
     haltResult,
@@ -572,7 +572,7 @@ function exportReport() {
     implantDepth,
     morphologyChange
   }, props.geometricData);
-  exportJSON(reportData);
+  exportPDF(reportData);
 }
 
 function exportReportJSON() {

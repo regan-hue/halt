@@ -1,6 +1,259 @@
 /**
  * 报告导出工具
  */
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+/**
+ * 导出报告为PDF格式
+ * @param {Object} reportData - 报告数据
+ * @param {string} filename - 文件名（不含扩展名）
+ */
+export function exportReportPDF(reportData, filename = 'halt-report') {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  let yPos = 20;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const marginLeft = 20;
+  const marginRight = 20;
+
+  // 页眉设计
+  doc.setFillColor(41, 128, 185);
+  doc.rect(0, 0, pageWidth, 8, 'F');
+
+  doc.setFontSize(24);
+  doc.setTextColor(41, 128, 185);
+  doc.text('HALT Postoperative Prediction Report', pageWidth / 2, yPos, { align: 'center' });
+  
+  yPos += 8;
+  doc.setFontSize(18);
+  doc.setTextColor(52, 73, 94);
+  doc.text('HALT Shuhou Yuece Fenxi Baogao', pageWidth / 2, yPos, { align: 'center' });
+  
+  yPos += 3;
+  doc.setLineWidth(0.5);
+  doc.setDrawColor(41, 128, 185);
+  doc.line(marginLeft, yPos, pageWidth - marginRight, yPos);
+  yPos += 10;
+
+  // 基本信息
+  if (reportData.basicInfo) {
+    doc.setFontSize(14);
+    doc.setTextColor(41, 128, 185);
+    doc.setFont('helvetica', 'bold');
+    doc.text('I. Basic Information', marginLeft, yPos);
+    yPos += 8;
+
+    const basicInfoData = [];
+    const { basicInfo } = reportData;
+    
+    if (basicInfo.patientId) basicInfoData.push(['Patient ID', basicInfo.patientId]);
+    if (basicInfo.name) basicInfoData.push(['Name', basicInfo.name]);
+    if (basicInfo.gender) basicInfoData.push(['Gender', basicInfo.gender]);
+    if (basicInfo.age) basicInfoData.push(['Age', `${basicInfo.age} years`]);
+    if (basicInfo.surgeryDate) basicInfoData.push(['Surgery Date', basicInfo.surgeryDate]);
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Item', 'Value']],
+      body: basicInfoData,
+      theme: 'grid',
+      headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255], fontSize: 11, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 10, textColor: [52, 73, 94] },
+      alternateRowStyles: { fillColor: [240, 248, 255] },
+      margin: { left: marginLeft, right: marginRight }
+    });
+
+    yPos = doc.lastAutoTable.finalY + 10;
+  }
+
+  // 瓣叶功能评估
+  if (yPos > pageHeight - 60) { doc.addPage(); yPos = 20; }
+  
+  doc.setFontSize(14);
+  doc.setTextColor(41, 128, 185);
+  doc.setFont('helvetica', 'bold');
+  doc.text('II. Valve Function Assessment', marginLeft, yPos);
+  yPos += 8;
+
+  const valveData = [];
+  const { valveAssessment } = reportData;
+
+  if (valveAssessment?.halt) {
+    const haltStatusMap = { 'none': 'None', 'exists': 'Exists', 'hard': 'Hard to determine' };
+    valveData.push(['HALT Status', haltStatusMap[valveAssessment.halt.result] || 'Not filled']);
+    
+    if (valveAssessment.halt.result === 'exists' && valveAssessment.halt.details) {
+      valveData.push(['  LC Grade', valveAssessment.halt.details.LC || '-']);
+      valveData.push(['  RC Grade', valveAssessment.halt.details.RC || '-']);
+      valveData.push(['  NC Grade', valveAssessment.halt.details.NC || '-']);
+    }
+  }
+
+  if (valveAssessment?.sfd) {
+    const sfdStatusMap = { 'none': 'None', 'exists': 'Exists', 'hard': 'Hard to determine' };
+    valveData.push(['SFD Status', sfdStatusMap[valveAssessment.sfd.result] || 'Not filled']);
+    
+    if (valveAssessment.sfd.result === 'exists' && valveAssessment.sfd.details) {
+      valveData.push(['  LC', valveAssessment.sfd.details.LC ? 'Yes' : 'No']);
+      valveData.push(['  RC', valveAssessment.sfd.details.RC ? 'Yes' : 'No']);
+      valveData.push(['  NC', valveAssessment.sfd.details.NC ? 'Yes' : 'No']);
+    }
+  }
+
+  if (valveAssessment?.pfd) {
+    const pfdStatusMap = { 'none': 'None', 'exists': 'Exists', 'hard': 'Hard to determine' };
+    valveData.push(['PFD Status', pfdStatusMap[valveAssessment.pfd.result] || 'Not filled']);
+    
+    if (valveAssessment.pfd.result === 'exists' && valveAssessment.pfd.thickness !== undefined) {
+      valveData.push(['  Max Thickness', `${valveAssessment.pfd.thickness} mm`]);
+    }
+  }
+
+  if (valveData.length > 0) {
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Assessment Item', 'Result']],
+      body: valveData,
+      theme: 'grid',
+      headStyles: { fillColor: [52, 152, 219], textColor: [255, 255, 255], fontSize: 11, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 10, textColor: [52, 73, 94] },
+      alternateRowStyles: { fillColor: [240, 248, 255] },
+      margin: { left: marginLeft, right: marginRight }
+    });
+    yPos = doc.lastAutoTable.finalY + 10;
+  }
+
+  // 几何形态评估
+  if (yPos > pageHeight - 80) { doc.addPage(); yPos = 20; }
+  
+  doc.setFontSize(14);
+  doc.setTextColor(41, 128, 185);
+  doc.setFont('helvetica', 'bold');
+  doc.text('III. Geometric Assessment', marginLeft, yPos);
+  yPos += 8;
+
+  const { geometricAssessment, alignment } = reportData;
+  const formatValue = (val) => (val === undefined || val === null) ? '--' : Number(val).toFixed(2);
+
+  ['inflow', 'nadir', 'commissure'].forEach(plane => {
+    if (geometricAssessment?.[plane]) {
+      if (yPos > pageHeight - 60) { doc.addPage(); yPos = 20; }
+      
+      const planeNames = { inflow: 'Inflow', nadir: 'Nadir', commissure: 'Commissure' };
+      doc.setFontSize(12);
+      doc.setTextColor(52, 73, 94);
+      doc.text(`${planeNames[plane]} Plane`, marginLeft, yPos);
+      yPos += 6;
+
+      const data = geometricAssessment[plane];
+      const planeData = [
+        ['Perimeter', `${formatValue(data.perimeter)} mm`],
+        ['Area', `${formatValue(data.area)} mm²`],
+        ['Dmax', `${formatValue(data.max_dist)} mm`],
+        ['Dmin', `${formatValue(data.min_dist)} mm`],
+        ['PED', `${formatValue(data.PED)} mm`],
+        ['AED', `${formatValue(data.AED)} mm`]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        body: planeData,
+        theme: 'striped',
+        bodyStyles: { fontSize: 9, textColor: [52, 73, 94] },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        margin: { left: marginLeft + 5, right: marginRight },
+        columnStyles: { 0: { cellWidth: 60, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } }
+      });
+
+      yPos = doc.lastAutoTable.finalY + 8;
+    }
+  });
+
+  // 植入深度
+  if (alignment?.implantDepth) {
+    if (yPos > pageHeight - 40) { doc.addPage(); yPos = 20; }
+    
+    doc.setFontSize(12);
+    doc.setTextColor(52, 73, 94);
+    doc.text('Implant Depth', marginLeft, yPos);
+    yPos += 6;
+
+    const depthData = [
+      ['NC', `${formatValue(alignment.implantDepth.NC)} mm`],
+      ['LC', `${formatValue(alignment.implantDepth.LC)} mm`],
+      ['RC', `${formatValue(alignment.implantDepth.RC)} mm`]
+    ];
+
+    autoTable(doc, {
+      startY: yPos,
+      body: depthData,
+      theme: 'striped',
+      bodyStyles: { fontSize: 9, textColor: [52, 73, 94] },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+      margin: { left: marginLeft + 5, right: marginRight },
+      columnStyles: { 0: { cellWidth: 60, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } }
+    });
+
+    yPos = doc.lastAutoTable.finalY + 10;
+  }
+
+  // 交接对齐
+  if (alignment) {
+    if (yPos > pageHeight - 50) { doc.addPage(); yPos = 20; }
+    
+    doc.setFontSize(14);
+    doc.setTextColor(41, 128, 185);
+    doc.setFont('helvetica', 'bold');
+    doc.text('IV. Commissural Alignment', marginLeft, yPos);
+    yPos += 8;
+
+    const alignmentData = [];
+
+    if (alignment.angles) {
+      alignmentData.push(['RCA to RCC/LCC', `${formatValue(alignment.angles.RCA_RCC_LCC)}°`]);
+      alignmentData.push(['RCA to LCC/NCC', `${formatValue(alignment.angles.RCA_LCC_NCC)}°`]);
+      alignmentData.push(['RCA to NCC/RCC', `${formatValue(alignment.angles.RCA_NCC_RCC)}°`]);
+    }
+
+    if (alignment.morphologyChange) {
+      const morphologyMap = { 'none': 'No morphology change', 'exists': 'Morphology change exists', 'unfilled': 'Not filled' };
+      alignmentData.push(['Morphology Change', morphologyMap[alignment.morphologyChange] || alignment.morphologyChange]);
+    }
+
+    if (alignmentData.length > 0) {
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Item', 'Value']],
+        body: alignmentData,
+        theme: 'grid',
+        headStyles: { fillColor: [52, 152, 219], textColor: [255, 255, 255], fontSize: 11, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 10, textColor: [52, 73, 94] },
+        alternateRowStyles: { fillColor: [240, 248, 255] },
+        margin: { left: marginLeft, right: marginRight }
+      });
+    }
+  }
+
+  // 页脚
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFillColor(41, 128, 185);
+    doc.rect(0, pageHeight - 15, pageWidth, 15, 'F');
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    doc.text(`Generated: ${new Date().toLocaleString('zh-CN')}`, marginLeft, pageHeight - 8);
+    doc.text(`Page ${i} of ${pageCount}`, pageWidth - marginRight, pageHeight - 8, { align: 'right' });
+  }
+
+  doc.save(`${filename}-${new Date().toISOString().split('T')[0]}.pdf`);
+}
 
 /**
  * 导出报告为JSON格式
