@@ -9,7 +9,7 @@
         <div class="viewport-element" ref="viewport1"></div>
       </div>
       <div class="viewport-container stl-viewport">
-        <div class="viewport-label">3D MODEL</div>
+        <!-- <div class="viewport-label">3D MODEL</div> -->
         <div class="viewport-element" ref="stlViewport"></div>
         <div v-if="stlLoading" class="stl-loading">
           <div class="spinner"></div>

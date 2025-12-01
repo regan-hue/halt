@@ -121,9 +121,48 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
   /**
    * 处理定位平面
    */
-  function handleLocatePlane(analysisType) {
+  async function handleLocatePlane(analysisType) {
     if (mainViewerRef.value) {
       mainViewerRef.value.locatePlane(analysisType);
+    }
+    
+    // 根据分析类型确定平面键名
+    let targetPlaneKey;
+    if (analysisType === 'halt') {
+      targetPlaneKey = 'Stent_Frame_Base_plane';
+    } else if (analysisType === 'sfd') {
+      targetPlaneKey = 'SOV_plane';
+    } else if (analysisType === 'pfd') {
+      targetPlaneKey = 'Stent_Frame_base_up_1.0_plane';
+    } else if (analysisType === 'inflow') {
+      targetPlaneKey = 'Stent_Frame_base_up_0.5_plane';
+    } else if (analysisType === 'nadir') {
+      targetPlaneKey = 'Stent_Frame_base_up_1.0_plane';
+    } else if (analysisType === 'commissure') {
+      targetPlaneKey = 'Stent_Frame_base_up_1.5_plane';
+    } else {
+      console.error('未知的分析类型:', analysisType);
+      return;
+    }
+    
+    // 读取几何数据
+    try {
+      const response = await fetch('/data/shousuoqi/measurement.json');
+      const data = await response.json();
+      const planeData = data[targetPlaneKey];
+      if (planeData) {
+        currentGeoData.value = {
+          perimeter: planeData.perimeter,
+          area: planeData.area,
+          PED: planeData.PED,
+          AED: planeData.AED,
+          max_dist: planeData.max_dist,
+          min_dist: planeData.min_dist,
+          average_dist: planeData.average_dist
+        };
+      }
+    } catch (error) {
+      console.error('Failed to load geometric data:', error);
     }
   }
 
