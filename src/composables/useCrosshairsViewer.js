@@ -339,8 +339,10 @@ export function useCrosshairsViewer(props) {
             return 'rgb(200, 200, 200)'; // 默认灰色
           }
         });
-        // 默认将十字架设置为被动状态（不显示）
-        toolGroup.setToolPassive(CrosshairsTool.toolName)
+        // 默认将十字架设置为激活状态（可以移动）
+        toolGroup.setToolActive(CrosshairsTool.toolName, {
+          bindings: [{ mouseButton: ToolsEnums.MouseBindings.Primary }],
+        })
 
         // 添加长度测量工具
         addTool(LengthTool)
@@ -963,7 +965,7 @@ export function useCrosshairsViewer(props) {
         return;
       }
 
-      // 禁用 Crosshairs 工具（设置为被动）
+      // 禁用 Crosshairs 工具（设置为被动），使其不能移动
       toolGroup.setToolPassive(CrosshairsTool.toolName);
       
       // 激活长度测量工具
@@ -975,7 +977,7 @@ export function useCrosshairsViewer(props) {
         ],
       });
       
-      console.log('长度测量工具已启用');
+      console.log('长度测量工具已启用，十字架已禁用移动');
     } catch (err) {
       console.error('启用长度测量工具失败:', err);
     }
@@ -995,12 +997,12 @@ export function useCrosshairsViewer(props) {
       // 将长度测量工具设置为被动
       toolGroup.setToolPassive(LengthTool.toolName);
       
-      // 重新激活 Crosshairs 工具
+      // 重新激活 Crosshairs 工具，使其可以移动
       toolGroup.setToolActive(CrosshairsTool.toolName, {
         bindings: [{ mouseButton: ToolsEnums.MouseBindings.Primary }],
       });
       
-      console.log('长度测量工具已禁用，Crosshairs 工具已恢复');
+      console.log('长度测量工具已禁用，十字架已恢复可移动状态');
     } catch (err) {
       console.error('禁用长度测量工具失败:', err);
     }
