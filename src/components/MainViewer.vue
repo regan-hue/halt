@@ -51,7 +51,7 @@ const props = defineProps({
   currentPhase: { type: String, default: '收缩期' },
 })
 
-const { loading, error, initialize, switchVolume, cleanup, locatePlane, restoreMPR } = useCrosshairsViewer(props)
+const { loading, error, initialize, switchVolume, cleanup, locatePlane, restoreMPR, enableLengthTool, disableLengthTool, undoLastMeasurement, enableCrosshairs, disableCrosshairs } = useCrosshairsViewer(props)
 const { 
   loading: stlLoading, 
   error: stlError, 
@@ -118,7 +118,12 @@ defineExpose({
     }
     return result;
   },
-  restoreMPR
+  restoreMPR,
+  enableLengthTool,
+  disableLengthTool,
+  undoLastMeasurement,
+  enableCrosshairs,
+  disableCrosshairs
 })
 
 // 监听 seriesInstanceUID 变化，切换体积

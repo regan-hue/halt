@@ -49,6 +49,16 @@
       <!-- Global Slice Control -->
       <!-- Removed slice view toggle -->
 
+      <!-- 全局工具栏 -->
+      <div class="global-toolbar">
+        <button class="tool-btn" @click="$emit('start-measure')" title="启用长度测量工具">
+          📏 测量
+        </button>
+        <button class="tool-btn" @click="$emit('undo-measurement')" title="撤销最后一次测量">
+          ↩️ 撤销
+        </button>
+      </div>
+
       <!-- Valve Assessment Module -->
       <div v-if="currentModule === 'valve'" class="module-panel">
         <div class="sub-menu">
@@ -89,13 +99,13 @@
             </div>
           </div>
           
-          <div class="slider-control mt-20">
+          <!-- <div class="slider-control mt-20">
             <label>平面层级定位 (Stent_Frame_base_up_X)</label>
             <div class="slider-row">
                <input type="range" min="0" max="5" step="0.5" v-model="planeLevel" @input="onPlaneLevelChange">
                <span class="value-tag">{{ planeLevel }}</span>
             </div>
-          </div>
+          </div> -->
           
           <div class="control-buttons mt-20">
             <button class="secondary-btn" @click="$emit('locate-plane', 'halt')">📍 定位平面</button>
@@ -308,6 +318,7 @@
 </template>
 
 <script setup>
+import { ref } from 'vue';
 import { useSidebar } from '../composables/useSidebar.js';
 import { collectReportData, exportReportJSON as exportJSON, exportReportText as exportTXT } from '../utils/reportExporter.js';
 
@@ -317,7 +328,9 @@ const emit = defineEmits([
   'module-change', 
   'sub-module-change', 
   'plane-level-change', 
-  'start-measure', 
+  'start-measure',
+  'stop-measure',
+  'undo-measurement',
   'toggle-virtual-valve', 
   'update-valve-opacity', 
   'update-valve-rotation',
@@ -485,6 +498,53 @@ function exportReportText() {
   flex: 1;
   overflow-y: auto;
   padding: 15px;
+}
+
+/* 全局工具栏 */
+.global-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 15px;
+  padding: 12px;
+  background: #0f253e;
+  border-radius: 6px;
+  border: 1px solid #1c3a5e;
+}
+
+.tool-btn {
+  flex: 1;
+  background: linear-gradient(135deg, #1890ff 0%, #0277bd 100%);
+  color: white;
+  border: none;
+  padding: 10px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.3);
+  white-space: nowrap;
+}
+
+.tool-btn:hover {
+  background: linear-gradient(135deg, #40a9ff 0%, #0288d1 100%);
+  box-shadow: 0 4px 8px rgba(24, 144, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.tool-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(24, 144, 255, 0.3);
+}
+
+.tool-btn.active {
+  background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);
+  box-shadow: 0 2px 4px rgba(82, 196, 26, 0.3);
+}
+
+.tool-btn.active:hover {
+  background: linear-gradient(135deg, #73d13d 0%, #52c41a 100%);
+  box-shadow: 0 4px 8px rgba(82, 196, 26, 0.5);
 }
 
 .module-panel h3 {

@@ -91,10 +91,40 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
 
   /**
    * 开始测量功能
-   * 注意：当前使用CrosshairsViewer，测量功能需要在工具组中激活
+   * 启用长度测量工具
    */
   function handleStartMeasure() {
     console.log('Start measure');
+    if (mainViewerRef.value && mainViewerRef.value.enableLengthTool) {
+      mainViewerRef.value.enableLengthTool();
+    } else {
+      console.warn('MainViewer 引用未找到或 enableLengthTool 方法不可用');
+    }
+  }
+
+  /**
+   * 停止测量功能
+   * 禁用长度测量工具，恢复 Crosshairs
+   */
+  function handleStopMeasure() {
+    console.log('Stop measure');
+    if (mainViewerRef.value && mainViewerRef.value.disableLengthTool) {
+      mainViewerRef.value.disableLengthTool();
+    } else {
+      console.warn('MainViewer 引用未找到或 disableLengthTool 方法不可用');
+    }
+  }
+
+  /**
+   * 撤销最后一个测量
+   */
+  function handleUndoMeasurement() {
+    console.log('Undo measurement');
+    if (mainViewerRef.value && mainViewerRef.value.undoLastMeasurement) {
+      mainViewerRef.value.undoLastMeasurement();
+    } else {
+      console.warn('MainViewer 引用未找到或 undoLastMeasurement 方法不可用');
+    }
   }
 
   /**
@@ -194,6 +224,8 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
     
     handlePlaneLevelChange,
     handleStartMeasure,
+    handleStopMeasure,
+    handleUndoMeasurement,
     handleToggleVirtualValve,
     handleUpdateValveOpacity,
     handleUpdateValveRotation,

@@ -9,6 +9,8 @@
         @sub-module-change="handleSubModuleChange"
         @plane-level-change="handlePlaneLevelChange"
         @start-measure="handleStartMeasure"
+        @stop-measure="handleStopMeasure"
+        @undo-measurement="handleUndoMeasurement"
         @toggle-virtual-valve="handleToggleVirtualValve"
         @update-valve-opacity="handleUpdateValveOpacity"
         @update-valve-rotation="handleUpdateValveRotation"
@@ -53,10 +55,13 @@ const {
   handleSubModuleChange,
   handlePlaneLevelChange,
   handleStartMeasure,
+  handleStopMeasure,
+  handleUndoMeasurement,
   handleToggleVirtualValve,
   handleUpdateValveOpacity,
-  handleUpdateValveRotation
-  , handleLocatePlane, handleRestoreMPR
+  handleUpdateValveRotation,
+  handleLocatePlane,
+  handleRestoreMPR
 } = useApp(config.seriesInstanceUIDs, studyInstanceUID);
 </script>
 

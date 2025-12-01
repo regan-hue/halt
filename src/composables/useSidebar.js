@@ -32,8 +32,8 @@ export function useSidebar(props, emit) {
   const valveRotation = ref(-29);
 
 
-  const implantDepth = ref({ NC: 13.00, LC: 0.00, RC: 0.00 });
-  const alignmentAngles = ref({ RCA_RCC_LCC: 80.0, RCA_LCC_NCC: 90.0, RCA_NCC_RCC: 100.0 });
+  const implantDepth = ref({ NC: 0.00, LC: 0.00, RC: 0.00 });
+  const alignmentAngles = ref({ RCA_RCC_LCC: 0.0, RCA_LCC_NCC: 0.0, RCA_NCC_RCC: 0.0 });
   const morphologyChange = ref('exists');
 
   // ========== 事件处理函数 ==========

@@ -16,6 +16,8 @@ import {
   addTool, 
   ToolGroupManager, 
   CrosshairsTool,
+  LengthTool,
+  annotation,
   Enums as ToolsEnums 
 } from '@cornerstonejs/tools'
 import { cornerstoneStreamingImageVolumeLoader } from '@cornerstonejs/streaming-image-volume-loader'
@@ -336,9 +338,14 @@ export function useCrosshairsViewer(props) {
             return 'rgb(200, 200, 200)'; // 默认灰色
           }
         });
-        toolGroup.setToolActive(CrosshairsTool.toolName, {
-          bindings: [{ mouseButton: ToolsEnums.MouseBindings.Primary }],
-        })
+        // 默认将十字架设置为被动状态（不显示）
+        toolGroup.setToolPassive(CrosshairsTool.toolName)
+
+        // 添加长度测量工具
+        addTool(LengthTool)
+        toolGroup.addTool(LengthTool.toolName)
+        // 默认将 LengthTool 设置为被动状态（不激活）
+        toolGroup.setToolPassive(LengthTool.toolName)
 
         // 添加其他必要的工具
         const { PanTool, WindowLevelTool, ZoomTool, StackScrollMouseWheelTool } = await import('@cornerstonejs/tools')
@@ -944,6 +951,147 @@ export function useCrosshairsViewer(props) {
     }
   }
 
+  /**
+   * 启用长度测量工具
+   */
+  function enableLengthTool() {
+    try {
+      const toolGroup = ToolGroupManager.getToolGroup(TOOL_GROUP_ID);
+      if (!toolGroup) {
+        console.warn('工具组未找到，无法启用长度测量工具');
+        return;
+      }
+
+      // 禁用 Crosshairs 工具（设置为被动）
+      toolGroup.setToolPassive(CrosshairsTool.toolName);
+      
+      // 激活长度测量工具
+      toolGroup.setToolActive(LengthTool.toolName, {
+        bindings: [
+          {
+            mouseButton: ToolsEnums.MouseBindings.Primary, // 左键点击
+          },
+        ],
+      });
+      
+      console.log('长度测量工具已启用');
+    } catch (err) {
+      console.error('启用长度测量工具失败:', err);
+    }
+  }
+
+  /**
+   * 禁用长度测量工具，恢复 Crosshairs 工具
+   */
+  function disableLengthTool() {
+    try {
+      const toolGroup = ToolGroupManager.getToolGroup(TOOL_GROUP_ID);
+      if (!toolGroup) {
+        console.warn('工具组未找到，无法禁用长度测量工具');
+        return;
+      }
+
+      // 将长度测量工具设置为被动
+      toolGroup.setToolPassive(LengthTool.toolName);
+      
+      // 重新激活 Crosshairs 工具
+      toolGroup.setToolActive(CrosshairsTool.toolName, {
+        bindings: [{ mouseButton: ToolsEnums.MouseBindings.Primary }],
+      });
+      
+      console.log('长度测量工具已禁用，Crosshairs 工具已恢复');
+    } catch (err) {
+      console.error('禁用长度测量工具失败:', err);
+    }
+  }
+
+  /**
+   * 撤销最后一个长度测量标注
+   */
+  function undoLastMeasurement() {
+    try {
+      if (!renderingEngine || !viewportIds) {
+        console.warn('渲染引擎未初始化');
+        return;
+      }
+
+      // 获取所有标注
+      const allAnnotations = annotation.state.getAllAnnotations();
+      
+      // 过滤出长度测量标注
+      const lengthAnnotations = allAnnotations.filter(
+        ann => ann.metadata?.toolName === LengthTool.toolName
+      );
+
+      if (lengthAnnotations.length === 0) {
+        console.log('没有可撤销的测量');
+        return;
+      }
+
+      // 获取最后一个标注
+      const lastAnnotation = lengthAnnotations[lengthAnnotations.length - 1];
+      
+      // 删除标注
+      annotation.state.removeAnnotation(lastAnnotation.annotationUID);
+      
+      // 重新渲染视图
+      renderingEngine.renderViewports([
+        viewportIds.axial,
+        viewportIds.sagittal,
+        viewportIds.coronal
+      ]);
+      
+      console.log('已撤销最后一个测量');
+    } catch (err) {
+      console.error('撤销测量失败:', err);
+    }
+  }
+
+  /**
+   * 启用十字架工具
+   */
+  function enableCrosshairs() {
+    try {
+      const toolGroup = ToolGroupManager.getToolGroup(TOOL_GROUP_ID);
+      if (!toolGroup) {
+        console.warn('工具组未找到');
+        return;
+      }
+
+      // 禁用其他工具
+      toolGroup.setToolPassive(LengthTool.toolName);
+      
+      // 激活十字架工具
+      toolGroup.setToolActive(CrosshairsTool.toolName, {
+        bindings: [{ mouseButton: ToolsEnums.MouseBindings.Primary }],
+      });
+      
+      console.log('十字架工具已启用');
+    } catch (err) {
+      console.error('启用十字架工具失败:', err);
+    }
+  }
+
+  /**
+   * 禁用十字架工具
+   */
+  function disableCrosshairs() {
+    try {
+      const toolGroup = ToolGroupManager.getToolGroup(TOOL_GROUP_ID);
+      if (!toolGroup) {
+        console.warn('工具组未找到');
+        return;
+      }
+
+      // 将十字架工具设置为被动
+      toolGroup.setToolPassive(CrosshairsTool.toolName);
+      
+      console.log('十字架工具已禁用');
+    } catch (err) {
+      console.error('禁用十字架工具失败:', err);
+    }
+  }
+
   return {
     loading,
     error,
@@ -952,6 +1100,11 @@ export function useCrosshairsViewer(props) {
     cleanup,
     locatePlane,
     restoreMPR,
+    enableLengthTool,
+    disableLengthTool,
+    undoLastMeasurement,
+    enableCrosshairs,
+    disableCrosshairs,
   }
 }
 
