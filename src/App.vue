@@ -4,6 +4,7 @@
       <Sidebar 
         :initial-phase="currentPhase"
         :geometric-data="currentGeoData"
+        :saved-view-states="savedViewStates"
         @phase-change="handlePhaseChange"
         @module-change="handleModuleChange"
         @sub-module-change="handleSubModuleChange"
@@ -11,6 +12,10 @@
         @start-measure="handleStartMeasure"
         @stop-measure="handleStopMeasure"
         @undo-measurement="handleUndoMeasurement"
+        @save-view-state="handleSaveViewState"
+        @restore-view-state="handleRestoreViewState"
+        @delete-view-state="handleDeleteViewState"
+        @rename-view-state="handleRenameViewState"
         @toggle-virtual-valve="handleToggleVirtualValve"
         @update-valve-opacity="handleUpdateValveOpacity"
         @update-valve-rotation="handleUpdateValveRotation"
@@ -29,7 +34,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useApp } from './composables/useApp.js';
 import { getAppConfig } from './config/appConfig.js';
 import Sidebar from './components/Sidebar.vue';
@@ -63,6 +68,35 @@ const {
   handleLocatePlane,
   handleRestoreMPR
 } = useApp(config.seriesInstanceUIDs, studyInstanceUID);
+
+// 视图状态管理
+const savedViewStates = computed(() => {
+  return mainViewerRef.value?.savedViewStates || [];
+});
+
+function handleSaveViewState(name) {
+  if (mainViewerRef.value && mainViewerRef.value.saveViewState) {
+    mainViewerRef.value.saveViewState(name);
+  }
+}
+
+function handleRestoreViewState(stateId) {
+  if (mainViewerRef.value && mainViewerRef.value.restoreViewState) {
+    mainViewerRef.value.restoreViewState(stateId);
+  }
+}
+
+function handleDeleteViewState(stateId) {
+  if (mainViewerRef.value && mainViewerRef.value.deleteViewState) {
+    mainViewerRef.value.deleteViewState(stateId);
+  }
+}
+
+function handleRenameViewState(stateId, newName) {
+  if (mainViewerRef.value && mainViewerRef.value.renameViewState) {
+    mainViewerRef.value.renameViewState(stateId, newName);
+  }
+}
 </script>
 
 <style>

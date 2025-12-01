@@ -51,7 +51,27 @@ const props = defineProps({
   currentPhase: { type: String, default: '收缩期' },
 })
 
-const { loading, error, initialize, switchVolume, cleanup, locatePlane, restoreMPR, enableLengthTool, disableLengthTool, undoLastMeasurement, enableCrosshairs, disableCrosshairs } = useCrosshairsViewer(props)
+const { 
+  loading, 
+  error, 
+  initialize, 
+  switchVolume, 
+  cleanup, 
+  locatePlane, 
+  restoreMPR, 
+  enableLengthTool, 
+  disableLengthTool, 
+  undoLastMeasurement, 
+  enableCrosshairs, 
+  disableCrosshairs,
+  savedViewStates,
+  saveViewState,
+  restoreViewState,
+  deleteViewState,
+  renameViewState,
+  clearAllViewStates,
+  getAxialSlicePosition
+} = useCrosshairsViewer(props)
 const { 
   loading: stlLoading, 
   error: stlError, 
@@ -59,6 +79,7 @@ const {
   switchPhase: switchSTLPhase,
   showPlane: showSTLPlane,
   hidePlane: hideSTLPlane,
+  updatePlanePosition: updateSTLPlanePosition,
   cleanup: cleanupSTL 
 } = useSTLViewer()
 
@@ -91,6 +112,9 @@ onMounted(async () => {
     // initialize 参数顺序: axialElement, sagittalElement, coronalElement
     // viewport1 = AXIAL, viewport2 = SAGITTAL, viewport3 = CORONAL
     await initialize(viewport1.value, viewport2.value, viewport3.value)
+    
+    // 设置 Axial 视图变化监听，用于同步 STL 平面
+    setupAxialViewListener()
   }
   
   // 初始化 3D STL 查看器（稍微延迟，确保DOM完全准备好）
@@ -103,6 +127,37 @@ onMounted(async () => {
     }
   }
 })
+
+// 设置 Axial 视图变化监听器
+function setupAxialViewListener() {
+  // 使用定时器轮询 Axial 切片位置变化
+  let lastPosition = null
+  
+  const checkPositionChange = () => {
+    const currentPosition = getAxialSlicePosition()
+    
+    if (currentPosition && currentPosition.origin) {
+      // 检查位置是否改变
+      if (!lastPosition || 
+          Math.abs(currentPosition.origin[0] - lastPosition.origin[0]) > 0.1 ||
+          Math.abs(currentPosition.origin[1] - lastPosition.origin[1]) > 0.1 ||
+          Math.abs(currentPosition.origin[2] - lastPosition.origin[2]) > 0.1) {
+        
+        // 更新 STL 平面位置
+        updateSTLPlanePosition(currentPosition.origin, currentPosition.normal)
+        lastPosition = currentPosition
+      }
+    }
+  }
+  
+  // 每100ms检查一次位置变化
+  const intervalId = setInterval(checkPositionChange, 100)
+  
+  // 在组件卸载时清除定时器
+  onBeforeUnmount(() => {
+    clearInterval(intervalId)
+  })
+}
 
 onBeforeUnmount(() => {
   cleanup()
@@ -123,7 +178,13 @@ defineExpose({
   disableLengthTool,
   undoLastMeasurement,
   enableCrosshairs,
-  disableCrosshairs
+  disableCrosshairs,
+  savedViewStates,
+  saveViewState,
+  restoreViewState,
+  deleteViewState,
+  renameViewState,
+  clearAllViewStates
 })
 
 // 监听 seriesInstanceUID 变化，切换体积

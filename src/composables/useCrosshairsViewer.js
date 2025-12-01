@@ -70,6 +70,7 @@ export function useCrosshairsViewer(props) {
   let viewportIds = null;
   let currentVolumeId = null;
   let initialCameraPositions = null; // 保存初始MPR位置
+  const savedViewStates = ref([]); // 保存的视图状态列表
 
   /**
    * 获取系列中的所有实例
@@ -1092,6 +1093,162 @@ export function useCrosshairsViewer(props) {
     }
   }
 
+  /**
+   * 保存当前视图状态
+   * @param {string} name - 状态名称
+   * @returns {Object} 保存的状态信息
+   */
+  function saveViewState(name = '未命名状态') {
+    try {
+      if (!renderingEngine || !viewportIds) {
+        console.warn('渲染引擎未初始化，无法保存状态');
+        return null;
+      }
+
+      const viewState = {
+        id: Date.now() + Math.random(),
+        name: name,
+        timestamp: new Date().toLocaleString('zh-CN'),
+        cameras: {},
+        volumeId: currentVolumeId
+      };
+
+      // 保存每个视图的相机状态
+      ['axial', 'sagittal', 'coronal'].forEach(viewName => {
+        try {
+          const viewport = renderingEngine.getViewport(viewportIds[viewName]);
+          if (viewport) {
+            const camera = viewport.getCamera();
+            viewState.cameras[viewName] = {
+              position: [...camera.position],
+              focalPoint: [...camera.focalPoint],
+              viewUp: [...camera.viewUp],
+              parallelScale: camera.parallelScale,
+              viewPlaneNormal: camera.viewPlaneNormal ? [...camera.viewPlaneNormal] : undefined
+            };
+          }
+        } catch (e) {
+          console.warn(`保存${viewName}视图失败:`, e);
+        }
+      });
+
+      savedViewStates.value.push(viewState);
+      console.log(`已保存视图状态: ${name}`);
+      return viewState;
+    } catch (err) {
+      console.error('保存视图状态失败:', err);
+      return null;
+    }
+  }
+
+  /**
+   * 恢复到指定的保存状态
+   * @param {number|string} stateId - 状态ID
+   */
+  function restoreViewState(stateId) {
+    try {
+      if (!renderingEngine || !viewportIds) {
+        console.warn('渲染引擎未初始化，无法恢复状态');
+        return false;
+      }
+
+      const viewState = savedViewStates.value.find(s => s.id === stateId);
+      if (!viewState) {
+        console.warn('未找到指定的视图状态');
+        return false;
+      }
+
+      // 恢复每个视图的相机状态
+      ['axial', 'sagittal', 'coronal'].forEach(viewName => {
+        try {
+          const viewport = renderingEngine.getViewport(viewportIds[viewName]);
+          const savedCamera = viewState.cameras[viewName];
+          if (viewport && savedCamera) {
+            viewport.setCamera(savedCamera);
+          }
+        } catch (e) {
+          console.warn(`恢复${viewName}视图失败:`, e);
+        }
+      });
+
+      // 重新渲染所有视图
+      renderingEngine.renderViewports([
+        viewportIds.axial,
+        viewportIds.sagittal,
+        viewportIds.coronal
+      ]);
+
+      console.log(`已恢复视图状态: ${viewState.name}`);
+      return true;
+    } catch (err) {
+      console.error('恢复视图状态失败:', err);
+      return false;
+    }
+  }
+
+  /**
+   * 删除保存的状态
+   * @param {number|string} stateId - 状态ID
+   */
+  function deleteViewState(stateId) {
+    const index = savedViewStates.value.findIndex(s => s.id === stateId);
+    if (index !== -1) {
+      const deletedState = savedViewStates.value.splice(index, 1)[0];
+      console.log(`已删除视图状态: ${deletedState.name}`);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * 重命名保存的状态
+   * @param {number|string} stateId - 状态ID
+   * @param {string} newName - 新名称
+   */
+  function renameViewState(stateId, newName) {
+    const viewState = savedViewStates.value.find(s => s.id === stateId);
+    if (viewState) {
+      viewState.name = newName;
+      console.log(`已重命名视图状态为: ${newName}`);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * 清空所有保存的状态
+   */
+  function clearAllViewStates() {
+    savedViewStates.value = [];
+    console.log('已清空所有保存的视图状态');
+  }
+
+  /**
+   * 获取 Axial 视图的当前切片位置
+   * @returns {Object|null} 包含 origin 和 normal 的对象
+   */
+  function getAxialSlicePosition() {
+    try {
+      if (!renderingEngine || !viewportIds) {
+        return null;
+      }
+
+      const axialViewport = renderingEngine.getViewport(viewportIds.axial);
+      if (!axialViewport) {
+        return null;
+      }
+
+      const camera = axialViewport.getCamera();
+      return {
+        origin: [...camera.focalPoint],
+        normal: camera.viewPlaneNormal ? [...camera.viewPlaneNormal] : [0, 0, 1]
+      };
+    } catch (err) {
+      console.error('获取 Axial 切片位置失败:', err);
+      return null;
+    }
+  }
+
   return {
     loading,
     error,
@@ -1105,6 +1262,14 @@ export function useCrosshairsViewer(props) {
     undoLastMeasurement,
     enableCrosshairs,
     disableCrosshairs,
+    // 视图状态管理
+    savedViewStates,
+    saveViewState,
+    restoreViewState,
+    deleteViewState,
+    renameViewState,
+    clearAllViewStates,
+    getAxialSlicePosition,
   }
 }
 

@@ -51,12 +51,86 @@
 
       <!-- 全局工具栏 -->
       <div class="global-toolbar">
-        <button class="tool-btn" @click="$emit('start-measure')" title="启用长度测量工具">
+        <button 
+          class="tool-btn" 
+          :class="{ active: measureToolActive }" 
+          @click="toggleMeasureTool" 
+          :title="measureToolActive ? '关闭长度测量工具' : '启用长度测量工具'"
+        >
           📏 测量
         </button>
         <button class="tool-btn" @click="$emit('undo-measurement')" title="撤销最后一次测量">
           ↩️ 撤销
         </button>
+      </div>
+
+      <!-- 视图状态管理 -->
+      <div class="view-states-panel">
+        <div class="view-states-header">
+          <h4>💾 视图状态管理</h4>
+          <button class="icon-btn" @click="showSaveDialog = true" title="保存当前视图">
+            ➕
+          </button>
+        </div>
+        
+        <div v-if="savedViewStates && savedViewStates.length > 0" class="view-states-list">
+          <div v-for="state in savedViewStates" :key="state.id" class="view-state-item">
+            <div class="state-info">
+              <div class="state-name">{{ state.name }}</div>
+              <div class="state-time">{{ state.timestamp }}</div>
+            </div>
+            <div class="state-actions">
+              <button class="action-btn restore" @click="$emit('restore-view-state', state.id)" title="恢复">
+                🔄
+              </button>
+              <button class="action-btn rename" @click="showRenameDialog(state)" title="重命名">
+                ✏️
+              </button>
+              <button class="action-btn delete" @click="$emit('delete-view-state', state.id)" title="删除">
+                🗑️
+              </button>
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty-state">
+          暂无保存的视图状态
+        </div>
+      </div>
+
+      <!-- 保存对话框 -->
+      <div v-if="showSaveDialog" class="modal-overlay" @click.self="showSaveDialog = false">
+        <div class="modal-content">
+          <h3>保存视图状态</h3>
+          <input 
+            v-model="newStateName" 
+            type="text" 
+            placeholder="输入状态名称"
+            @keyup.enter="saveCurrentView"
+            class="name-input"
+          />
+          <div class="modal-actions">
+            <button class="secondary-btn" @click="showSaveDialog = false">取消</button>
+            <button class="primary-btn" @click="saveCurrentView">保存</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 重命名对话框 -->
+      <div v-if="showRenameDialogFlag" class="modal-overlay" @click.self="showRenameDialogFlag = false">
+        <div class="modal-content">
+          <h3>重命名视图状态</h3>
+          <input 
+            v-model="renameStateName" 
+            type="text" 
+            placeholder="输入新名称"
+            @keyup.enter="confirmRename"
+            class="name-input"
+          />
+          <div class="modal-actions">
+            <button class="secondary-btn" @click="showRenameDialogFlag = false">取消</button>
+            <button class="primary-btn" @click="confirmRename">确认</button>
+          </div>
+        </div>
       </div>
 
       <!-- Valve Assessment Module -->
@@ -322,7 +396,7 @@ import { ref } from 'vue';
 import { useSidebar } from '../composables/useSidebar.js';
 import { collectReportData, exportReportJSON as exportJSON, exportReportText as exportTXT } from '../utils/reportExporter.js';
 
-const props = defineProps(['initialPhase', 'geometricData']);
+const props = defineProps(['initialPhase', 'geometricData', 'savedViewStates']);
 const emit = defineEmits([
   'phase-change', 
   'module-change', 
@@ -335,7 +409,11 @@ const emit = defineEmits([
   'update-valve-opacity', 
   'update-valve-rotation',
   'locate-plane',
-  'restore-mpr'
+  'restore-mpr',
+  'save-view-state',
+  'restore-view-state',
+  'delete-view-state',
+  'rename-view-state'
 ]);
 
 const {
@@ -364,6 +442,47 @@ const {
   showGeometric,
   formatNum
 } = useSidebar(props, emit);
+
+// 测量工具状态
+const measureToolActive = ref(false);
+
+function toggleMeasureTool() {
+  measureToolActive.value = !measureToolActive.value;
+  if (measureToolActive.value) {
+    emit('start-measure');
+  } else {
+    emit('stop-measure');
+  }
+}
+
+// 视图状态管理
+const showSaveDialog = ref(false);
+const showRenameDialogFlag = ref(false);
+const newStateName = ref('');
+const renameStateName = ref('');
+const renameStateId = ref(null);
+
+function saveCurrentView() {
+  const name = newStateName.value.trim() || '未命名状态';
+  emit('save-view-state', name);
+  newStateName.value = '';
+  showSaveDialog.value = false;
+}
+
+function showRenameDialog(state) {
+  renameStateId.value = state.id;
+  renameStateName.value = state.name;
+  showRenameDialogFlag.value = true;
+}
+
+function confirmRename() {
+  if (renameStateId.value && renameStateName.value.trim()) {
+    emit('rename-view-state', renameStateId.value, renameStateName.value.trim());
+    showRenameDialogFlag.value = false;
+    renameStateName.value = '';
+    renameStateId.value = null;
+  }
+}
 
 function exportReport() {
   // 默认导出为JSON
@@ -545,6 +664,191 @@ function exportReportText() {
 .tool-btn.active:hover {
   background: linear-gradient(135deg, #73d13d 0%, #52c41a 100%);
   box-shadow: 0 4px 8px rgba(82, 196, 26, 0.5);
+}
+
+/* 视图状态管理面板 */
+.view-states-panel {
+  background: #0f253e;
+  border-radius: 6px;
+  border: 1px solid #1c3a5e;
+  padding: 12px;
+  margin-bottom: 15px;
+}
+
+.view-states-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.view-states-header h4 {
+  margin: 0;
+  color: #4fc3f7;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.icon-btn {
+  background: #1890ff;
+  color: white;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.icon-btn:hover {
+  background: #40a9ff;
+  transform: scale(1.1);
+}
+
+.view-states-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.view-state-item {
+  background: #132c48;
+  border: 1px solid #1c3a5e;
+  border-radius: 4px;
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.3s ease;
+}
+
+.view-state-item:hover {
+  background: #1a3a58;
+  border-color: #2a5a8e;
+}
+
+.state-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.state-name {
+  color: #e0e0e0;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.state-time {
+  color: #8aa4c0;
+  font-size: 11px;
+}
+
+.state-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.action-btn {
+  background: transparent;
+  border: 1px solid #1c3a5e;
+  color: #8aa4c0;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.action-btn.restore:hover {
+  background: #1890ff;
+  border-color: #1890ff;
+  color: white;
+}
+
+.action-btn.rename:hover {
+  background: #faad14;
+  border-color: #faad14;
+  color: white;
+}
+
+.action-btn.delete:hover {
+  background: #ff4d4f;
+  border-color: #ff4d4f;
+  color: white;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 20px;
+  color: #8aa4c0;
+  font-size: 12px;
+}
+
+/* 对话框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #0b1829;
+  border: 1px solid #1c3a5e;
+  border-radius: 8px;
+  padding: 24px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.modal-content h3 {
+  margin: 0 0 16px 0;
+  color: #4fc3f7;
+  font-size: 16px;
+}
+
+.name-input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #1c3a5e;
+  border-radius: 4px;
+  background: #132c48;
+  color: #e0e0e0;
+  font-size: 14px;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+
+.name-input:focus {
+  outline: none;
+  border-color: #1890ff;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .module-panel h3 {

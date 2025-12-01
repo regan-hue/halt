@@ -217,7 +217,7 @@ export function useSTLViewer() {
         minZ = Math.min(minZ, point[2]);
         maxZ = Math.max(maxZ, point[2]);
       });
-      const size = Math.max(maxX - minX, maxY - minY, maxZ - minZ) * 2;
+      const size = Math.max(maxX - minX, maxY - minY, maxZ - minZ) * 5;
 
       // 创建平面源
       const planeSource = vtkPlaneSource.newInstance();
@@ -266,6 +266,60 @@ export function useSTLViewer() {
       planeActor.value = null;
       context.value.renderWindow.render();
       console.log('定位平面已隐藏');
+    }
+  }
+
+  /**
+   * 更新平面位置（用于同步 Axial 切面移动）
+   * @param {Array} origin - 新的平面中心点 [x, y, z]
+   * @param {Array} normal - 平面法向量 [x, y, z]
+   */
+  function updatePlanePosition(origin, normal) {
+    if (!planeActor.value || !context.value) {
+      return;
+    }
+
+    try {
+      // 获取当前平面的 mapper 和 source
+      const mapper = planeActor.value.getMapper();
+      const planeSource = mapper.getInputConnection(0).filter;
+      
+      if (!planeSource) {
+        console.warn('无法获取平面源');
+        return;
+      }
+
+      // 获取当前平面的 point1 和 point2，以保持平面大小
+      const currentOrigin = planeSource.getOrigin();
+      const currentPoint1 = planeSource.getPoint1();
+      const currentPoint2 = planeSource.getPoint2();
+      
+      // 计算平面大小（从原点到 point1 的距离）
+      const dx1 = currentPoint1[0] - currentOrigin[0];
+      const dy1 = currentPoint1[1] - currentOrigin[1];
+      const dz1 = currentPoint1[2] - currentOrigin[2];
+      const dx2 = currentPoint2[0] - currentOrigin[0];
+      const dy2 = currentPoint2[1] - currentOrigin[1];
+      const dz2 = currentPoint2[2] - currentOrigin[2];
+
+      // 计算平面大小
+      const size = Math.sqrt(dx1*dx1 + dy1*dy1 + dz1*dz1);
+
+      // 设置新的平面位置
+      const normalizedNormal = normalizeVec(normal);
+      planeSource.setOrigin(origin[0] - size/2, origin[1] - size/2, origin[2]);
+      planeSource.setPoint1(origin[0] + size/2, origin[1] - size/2, origin[2]);
+      planeSource.setPoint2(origin[0] - size/2, origin[1] + size/2, origin[2]);
+      planeSource.setNormal(normalizedNormal[0], normalizedNormal[1], normalizedNormal[2]);
+      
+      // 强制更新
+      planeSource.modified();
+      planeActor.value.modified();
+      
+      // 渲染
+      context.value.renderWindow.render();
+    } catch (error) {
+      console.error('更新平面位置失败:', error);
     }
   }
 
@@ -425,6 +479,7 @@ export function useSTLViewer() {
     toggleFileVisibility,
     showPlane,
     hidePlane,
+    updatePlanePosition,
     cleanup,
   };
 }
