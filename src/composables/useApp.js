@@ -184,6 +184,49 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
   }
 
   /**
+   * 加载收缩期和舒张期的几何数据（用于报告）
+   */
+  async function loadGeometricDataForBothPhases() {
+    try {
+      const extractPlaneData = (planeData) => {
+        if (!planeData) return null;
+        return {
+          perimeter: planeData.perimeter,
+          area: planeData.area,
+          PED: planeData.PED,
+          AED: planeData.AED,
+          max_dist: planeData.max_dist,
+          min_dist: planeData.min_dist,
+          average_dist: planeData.average_dist
+        };
+      };
+
+      // 加载收缩期数据
+      const systolicResponse = await fetch('/data/shousuoqi/measurement.json');
+      const systolicData = await systolicResponse.json();
+      const systolic = {
+        inflow: extractPlaneData(systolicData['Stent_Frame_Base_plane']),
+        nadir: extractPlaneData(systolicData['Stent_Frame_base_up_1.0_plane']),
+        commissure: extractPlaneData(systolicData['Stent_Frame_Crown_Frame_plane'])
+      };
+
+      // 加载舒张期数据
+      const diastolicResponse = await fetch('/data/shuzhangqi/measurement.json');
+      const diastolicData = await diastolicResponse.json();
+      const diastolic = {
+        inflow: extractPlaneData(diastolicData['Stent_Frame_Base_plane']),
+        nadir: extractPlaneData(diastolicData['Stent_Frame_base_up_1.0_plane']),
+        commissure: extractPlaneData(diastolicData['Stent_Frame_Crown_Frame_plane'])
+      };
+
+      return { systolic, diastolic };
+    } catch (error) {
+      console.error('Failed to load geometric data for both phases:', error);
+      return null;
+    }
+  }
+
+  /**
    * 处理定位平面
    */
   async function handleLocatePlane(analysisType) {
@@ -249,7 +292,8 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
     handleUpdateValveRotation,
     handleLocatePlane,
     handleRestoreMPR,
-    loadAllGeometricData
+    loadAllGeometricData,
+    loadGeometricDataForBothPhases
   };
 }
 

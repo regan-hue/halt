@@ -182,8 +182,14 @@
           </div> -->
           
           <div class="control-buttons mt-20">
+            <button class="primary-btn" @click="saveHaltData">💾 保存到报告</button>
+          </div>
+          <div class="control-buttons mt-10">
             <button class="secondary-btn" @click="$emit('locate-plane', 'halt')">📍 定位平面</button>
             <button class="secondary-btn" @click="$emit('restore-mpr')">🔄 恢复MPR</button>
+          </div>
+          <div v-if="savedHaltResult" class="info-message mt-10">
+            ✓ 已保存到报告
           </div>
         </div>
 
@@ -219,8 +225,14 @@
           </div>
           
           <div class="control-buttons mt-20">
+            <button class="primary-btn" @click="saveSfdData">💾 保存到报告</button>
+          </div>
+          <div class="control-buttons mt-10">
             <button class="secondary-btn" @click="$emit('locate-plane', 'sfd')">📍 定位平面</button>
             <button class="secondary-btn" @click="$emit('restore-mpr')">🔄 恢复MPR</button>
+          </div>
+          <div v-if="savedSfdResult" class="info-message mt-10">
+            ✓ 已保存到报告
           </div>
         </div>
 
@@ -251,8 +263,14 @@
           </div>
           
           <div class="control-buttons mt-20">
+            <button class="primary-btn" @click="savePfdData">💾 保存到报告</button>
+          </div>
+          <div class="control-buttons mt-10">
             <button class="secondary-btn" @click="$emit('locate-plane', 'pfd')">📍 定位平面</button>
             <button class="secondary-btn" @click="$emit('restore-mpr')">🔄 恢复MPR</button>
+          </div>
+          <div v-if="savedPfdResult" class="info-message mt-10">
+            ✓ 已保存到报告
           </div>
         </div>
       </div>
@@ -367,28 +385,28 @@
             
             <p><strong>HALT状态与分级</strong></p>
             <div class="info-grid">
-                <div>状态: {{ haltResult === 'none' ? '无' : haltResult === 'exists' ? '有' : '难以判定' }}</div>
+                <div>状态: {{ savedHaltResult ? (savedHaltResult === 'none' ? '无' : savedHaltResult === 'exists' ? '有' : '难以判定') : '未保存' }}</div>
             </div>
-            <div v-if="haltResult === 'exists'" class="info-grid mt-5">
-                <div>LC分级: {{ haltDetails.LC }}</div>
-                <div>RC分级: {{ haltDetails.RC }}</div>
-                <div>NC分级: {{ haltDetails.NC }}</div>
+            <div v-if="savedHaltResult === 'exists' && savedHaltDetails" class="info-grid mt-5">
+                <div>LC分级: {{ savedHaltDetails.LC }}</div>
+                <div>RC分级: {{ savedHaltDetails.RC }}</div>
+                <div>NC分级: {{ savedHaltDetails.NC }}</div>
             </div>
 
             <p class="mt-10"><strong>SFD分析</strong></p>
             <div class="info-grid">
-                <div>状态: {{ sfdResult === 'none' ? '无' : sfdResult === 'exists' ? '有' : '难以判定' }}</div>
+                <div>状态: {{ savedSfdResult ? (savedSfdResult === 'none' ? '无' : savedSfdResult === 'exists' ? '有' : '难以判定') : '未保存' }}</div>
             </div>
-            <div v-if="sfdResult === 'exists'" class="info-grid mt-5">
-                <div>LC: {{ sfdDetails.LC ? '是' : '否' }}</div>
-                <div>RC: {{ sfdDetails.RC ? '是' : '否' }}</div>
-                <div>NC: {{ sfdDetails.NC ? '是' : '否' }}</div>
+            <div v-if="savedSfdResult === 'exists' && savedSfdDetails" class="info-grid mt-5">
+                <div>LC: {{ savedSfdDetails.LC ? '是' : '否' }}</div>
+                <div>RC: {{ savedSfdDetails.RC ? '是' : '否' }}</div>
+                <div>NC: {{ savedSfdDetails.NC ? '是' : '否' }}</div>
             </div>
 
             <p class="mt-10"><strong>PFD分析</strong></p>
             <div class="info-grid">
-                <div>状态: {{ pfdResult === 'none' ? '无' : pfdResult === 'exists' ? '有' : '难以判定' }}</div>
-                <div v-if="pfdResult === 'exists'">最大厚度: {{ pfdThickness }} mm</div>
+                <div>状态: {{ savedPfdResult ? (savedPfdResult === 'none' ? '无' : savedPfdResult === 'exists' ? '有' : '难以判定') : '未保存' }}</div>
+                <div v-if="savedPfdResult === 'exists' && savedPfdThickness">最大厚度: {{ savedPfdThickness }} mm</div>
             </div>
         </div>
 
@@ -470,7 +488,7 @@ import { ref } from 'vue';
 import { useSidebar } from '../composables/useSidebar.js';
 import { collectReportData, exportReportPDF as exportPDF, exportReportJSON as exportJSON, exportReportText as exportTXT } from '../utils/reportExporter.js';
 
-const props = defineProps(['initialPhase', 'geometricData', 'savedViewStates']);
+const props = defineProps(['initialPhase', 'geometricData', 'savedViewStates', 'loadGeometricDataForBothPhases']);
 const emit = defineEmits([
   'phase-change', 
   'module-change', 
@@ -498,10 +516,16 @@ const {
   haltResult,
   haltDetails,
   haltGrades,
+  savedHaltResult,
+  savedHaltDetails,
   sfdResult,
   sfdDetails,
+  savedSfdResult,
+  savedSfdDetails,
   pfdResult,
   pfdThickness,
+  savedPfdResult,
+  savedPfdThickness,
   planeLevel,
   valveOpacity,
   valveRotation,
@@ -514,7 +538,10 @@ const {
   setSubModule,
   onPlaneLevelChange,
   showGeometric,
-  formatNum
+  formatNum,
+  saveHaltData,
+  saveSfdData,
+  savePfdData
 } = useSidebar(props, emit);
 
 // 测量工具状态
@@ -558,52 +585,70 @@ function confirmRename() {
   }
 }
 
-function exportReportPDF() {
-  // 导出为PDF
+async function exportReportPDF() {
+  // 加载收缩期和舒张期的几何数据
+  let bothPhasesGeoData = null;
+  if (props.loadGeometricDataForBothPhases) {
+    bothPhasesGeoData = await props.loadGeometricDataForBothPhases();
+  }
+  
+  // 导出为PDF，只使用已保存的数据
   const reportData = collectReportData({
     currentPhase,
-    haltResult,
-    haltDetails,
-    sfdResult,
-    sfdDetails,
-    pfdResult,
-    pfdThickness,
+    haltResult: savedHaltResult,
+    haltDetails: savedHaltDetails,
+    sfdResult: savedSfdResult,
+    sfdDetails: savedSfdDetails,
+    pfdResult: savedPfdResult,
+    pfdThickness: savedPfdThickness,
     alignmentAngles,
     implantDepth,
     morphologyChange
-  }, props.geometricData);
-  exportPDF(reportData);
+  }, bothPhasesGeoData || props.geometricData);
+  await exportPDF(reportData);
 }
 
-function exportReportJSON() {
+async function exportReportJSON() {
+  // 加载收缩期和舒张期的几何数据
+  let bothPhasesGeoData = null;
+  if (props.loadGeometricDataForBothPhases) {
+    bothPhasesGeoData = await props.loadGeometricDataForBothPhases();
+  }
+  
   const reportData = collectReportData({
     currentPhase,
-    haltResult,
-    haltDetails,
-    sfdResult,
-    sfdDetails,
-    pfdResult,
-    pfdThickness,
+    haltResult: savedHaltResult,
+    haltDetails: savedHaltDetails,
+    sfdResult: savedSfdResult,
+    sfdDetails: savedSfdDetails,
+    pfdResult: savedPfdResult,
+    pfdThickness: savedPfdThickness,
     alignmentAngles,
     implantDepth,
     morphologyChange
-  }, props.geometricData);
+  }, bothPhasesGeoData || props.geometricData);
   exportJSON(reportData);
 }
 
-function exportReportText() {
+async function exportReportText() {
+  // 加载收缩期和舒张期的几何数据
+  let bothPhasesGeoData = null;
+  if (props.loadGeometricDataForBothPhases) {
+    bothPhasesGeoData = await props.loadGeometricDataForBothPhases();
+  }
+  
   const reportData = collectReportData({
     currentPhase,
-    haltResult,
-    haltDetails,
-    sfdResult,
-    sfdDetails,
-    pfdResult,
-    pfdThickness,
+    haltResult: savedHaltResult,
+    haltDetails: savedHaltDetails,
+    sfdResult: savedSfdResult,
+    sfdDetails: savedSfdDetails,
+    pfdResult: savedPfdResult,
+    pfdThickness: savedPfdThickness,
     alignmentAngles,
     implantDepth,
     morphologyChange
-  }, props.geometricData);
+  }, bothPhasesGeoData || props.geometricData);
   exportTXT(reportData);
 }
 </script>
@@ -1251,8 +1296,19 @@ function exportReportText() {
     color: #555;
 }
 
+.info-message {
+    background: #f6ffed;
+    border: 1px solid #b7eb8f;
+    color: #52c41a;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    text-align: center;
+}
+
 .mt-20 { margin-top: 20px; }
 .mt-10 { margin-top: 10px; }
+.mt-5 { margin-top: 5px; }
 
 input[type="range"] {
     width: 100%;

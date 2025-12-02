@@ -5,6 +5,7 @@
         :initial-phase="currentPhase"
         :geometric-data="currentGeoData"
         :saved-view-states="savedViewStates"
+        :load-geometric-data-for-both-phases="loadGeometricDataForBothPhases"
         @phase-change="handlePhaseChange"
         @module-change="handleModuleChange"
         @sub-module-change="handleSubModuleChange"
@@ -68,7 +69,8 @@ const {
   handleUpdateValveRotation,
   handleLocatePlane,
   handleRestoreMPR,
-  loadAllGeometricData
+  loadAllGeometricData,
+  loadGeometricDataForBothPhases
 } = useApp(config.seriesInstanceUIDs, studyInstanceUID);
 
 // 视图状态管理

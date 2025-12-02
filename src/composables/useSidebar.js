@@ -17,15 +17,30 @@ export function useSidebar(props, emit) {
   const geoType = ref('inflow');
 
   // ========== 数据模型 ==========
+  // HALT - 临时数据（编辑中）
   const haltResult = ref('exists');
   const haltDetails = ref({ LC: '0', RC: '0', NC: '0' });
   const haltGrades = ['0', '≤25%', '25-50%', '50-75%', '>75%'];
+  
+  // HALT - 已保存数据（用于报告）
+  const savedHaltResult = ref(null);
+  const savedHaltDetails = ref(null);
 
+  // SFD - 临时数据（编辑中）
   const sfdResult = ref('exists');
   const sfdDetails = ref({ LC: false, RC: true, NC: false });
+  
+  // SFD - 已保存数据（用于报告）
+  const savedSfdResult = ref(null);
+  const savedSfdDetails = ref(null);
 
+  // PFD - 临时数据（编辑中）
   const pfdResult = ref('exists');
   const pfdThickness = ref(23.6);
+  
+  // PFD - 已保存数据（用于报告）
+  const savedPfdResult = ref(null);
+  const savedPfdThickness = ref(null);
 
   const planeLevel = ref(0);
   const valveOpacity = ref(0.22);
@@ -103,6 +118,30 @@ export function useSidebar(props, emit) {
     return Number(val).toFixed(2);
   }
 
+  /**
+   * 保存 HALT 数据到报告
+   */
+  function saveHaltData() {
+    savedHaltResult.value = haltResult.value;
+    savedHaltDetails.value = { ...haltDetails.value };
+  }
+
+  /**
+   * 保存 SFD 数据到报告
+   */
+  function saveSfdData() {
+    savedSfdResult.value = sfdResult.value;
+    savedSfdDetails.value = { ...sfdDetails.value };
+  }
+
+  /**
+   * 保存 PFD 数据到报告
+   */
+  function savePfdData() {
+    savedPfdResult.value = pfdResult.value;
+    savedPfdThickness.value = pfdThickness.value;
+  }
+
   // ========== 返回值 ==========
   return {
     // 状态
@@ -110,13 +149,23 @@ export function useSidebar(props, emit) {
     currentModule,
     subModule,
     geoType,
+    // HALT 数据
     haltResult,
     haltDetails,
     haltGrades,
+    savedHaltResult,
+    savedHaltDetails,
+    // SFD 数据
     sfdResult,
     sfdDetails,
+    savedSfdResult,
+    savedSfdDetails,
+    // PFD 数据
     pfdResult,
     pfdThickness,
+    savedPfdResult,
+    savedPfdThickness,
+    // 其他数据
     planeLevel,
     valveOpacity,
     valveRotation,
@@ -129,7 +178,10 @@ export function useSidebar(props, emit) {
     setSubModule,
     onPlaneLevelChange,
     showGeometric,
-    formatNum
+    formatNum,
+    saveHaltData,
+    saveSfdData,
+    savePfdData
   };
 }
 
