@@ -65,6 +65,7 @@ const {
   undoLastMeasurement, 
   enableCrosshairs, 
   disableCrosshairs,
+  handleResize,
   savedViewStates,
   saveViewState,
   restoreViewState,
@@ -190,6 +191,30 @@ function setupAxialViewListener() {
     }
   })
 }
+
+// 添加窗口大小调整监听器
+onMounted(() => {
+  const handleWindowResize = () => {
+    if (handleResize) {
+      handleResize()
+    }
+  }
+  
+  // 使用防抖避免频繁调用
+  let resizeTimeout
+  const debouncedResize = () => {
+    clearTimeout(resizeTimeout)
+    resizeTimeout = setTimeout(handleWindowResize, 150)
+  }
+  
+  window.addEventListener('resize', debouncedResize)
+  
+  // 清理监听器
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', debouncedResize)
+    clearTimeout(resizeTimeout)
+  })
+})
 
 onBeforeUnmount(() => {
   cleanup()

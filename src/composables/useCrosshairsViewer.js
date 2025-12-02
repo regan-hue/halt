@@ -467,7 +467,7 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
           // 从缓存中移除旧体积
           const oldVolume = cache.getVolume(currentVolumeId)
           if (oldVolume) {
-            cache.removeVolumeLoaders(currentVolumeId)
+            cache.removeVolumeLoadObject(currentVolumeId)
           }
         } catch (e) {
           console.warn('清理旧体积时出错:', e)
@@ -492,6 +492,12 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
         }
       }
 
+      // 验证体积数据已正确加载
+      if (!volume || !volume.imageData) {
+        console.error('体积数据未正确加载')
+        throw new Error('体积数据加载失败')
+      }
+
       // 缓存体积信息
       volumeCache[seriesInstanceUID] = {
         volumeId,
@@ -505,10 +511,26 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
       const sagittalViewport = renderingEngineInstance.getViewport(viewportIdsInstance.sagittal)
       const coronalViewport = renderingEngineInstance.getViewport(viewportIdsInstance.coronal)
 
-      // 设置体积到各个viewport
-      axialViewport.setVolumes([{ volumeId }])
-      sagittalViewport.setVolumes([{ volumeId }])
-      coronalViewport.setVolumes([{ volumeId }])
+      // 设置体积到各个viewport（setVolumes 是异步的，需要等待完成）
+      // 传递 immediate: false 防止立即渲染，避免在 extent 未就绪时调用 resetCamera
+      await Promise.all([
+        axialViewport.setVolumes([{ volumeId }], false),
+        sagittalViewport.setVolumes([{ volumeId }], false),
+        coronalViewport.setVolumes([{ volumeId }], false)
+      ])
+
+      // 等待一小段时间，确保体积的 imageData 和 extent 已完全初始化
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      // 等待第一次渲染完成，确保体积数据已准备好
+      await renderingEngineInstance.renderViewports([
+        viewportIdsInstance.axial,
+        viewportIdsInstance.sagittal,
+        viewportIdsInstance.coronal
+      ])
+
+      // 再次延迟确保 VTK 内部状态（如 extent）已完全更新
+      await new Promise(resolve => setTimeout(resolve, 50))
 
       // 更新当前体积ID
       currentVolumeId = volumeId
@@ -1630,6 +1652,53 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
     }
   }
 
+  /**
+   * 处理窗口大小调整，自动调整 viewport 大小
+   */
+  function handleResize() {
+    if (!renderingEngine || !viewportIds) {
+      return
+    }
+
+    try {
+      // 获取所有 viewport 并调用 resize
+      const viewportIdArray = [
+        viewportIds.axial,
+        viewportIds.sagittal,
+        viewportIds.coronal
+      ]
+
+      viewportIdArray.forEach(vpId => {
+        try {
+          const viewport = renderingEngine.getViewport(vpId)
+          if (viewport && viewport.canvas) {
+            // 获取父元素的实际大小
+            const canvas = viewport.canvas
+            const parent = canvas.parentElement
+            if (parent) {
+              const rect = parent.getBoundingClientRect()
+              // 设置 canvas 大小
+              canvas.width = rect.width
+              canvas.height = rect.height
+              canvas.style.width = rect.width + 'px'
+              canvas.style.height = rect.height + 'px'
+            }
+          }
+        } catch (e) {
+          console.warn(`调整 viewport ${vpId} 大小失败:`, e)
+        }
+      })
+
+      // 通知渲染引擎更新 viewport 大小
+      renderingEngine.resize(true)
+
+      // 重新渲染所有 viewport
+      optimizedRender(viewportIdArray)
+    } catch (err) {
+      console.warn('处理窗口大小调整失败:', err)
+    }
+  }
+
   return {
     loading,
     error,
@@ -1643,6 +1712,7 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
     undoLastMeasurement,
     enableCrosshairs,
     disableCrosshairs,
+    handleResize,
     // 视图状态管理
     savedViewStates,
     saveViewState,
