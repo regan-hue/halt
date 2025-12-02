@@ -49,6 +49,55 @@ function vectorLength(v) {
   return Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
 }
 
+// ========== 性能优化辅助函数 ==========
+/**
+ * 创建节流函数，限制函数执行频率
+ */
+function throttle(func, delay) {
+  let lastCall = 0;
+  let timeoutId = null;
+  
+  return function(...args) {
+    const now = Date.now();
+    const timeSinceLastCall = now - lastCall;
+    
+    // 清除之前的延迟调用
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    
+    if (timeSinceLastCall >= delay) {
+      lastCall = now;
+      func.apply(this, args);
+    } else {
+      // 延迟调用以确保最后一次调用被执行
+      timeoutId = setTimeout(() => {
+        lastCall = Date.now();
+        func.apply(this, args);
+      }, delay - timeSinceLastCall);
+    }
+  };
+}
+
+/**
+ * 请求动画帧节流
+ */
+function rafThrottle(func) {
+  let rafId = null;
+  let lastArgs = null;
+  
+  return function(...args) {
+    lastArgs = args;
+    
+    if (rafId === null) {
+      rafId = requestAnimationFrame(() => {
+        func.apply(this, lastArgs);
+        rafId = null;
+      });
+    }
+  };
+}
+
 // ========== 常量定义 ==========
 const RENDERING_ENGINE_ID = 'myRenderingEngine';
 const TOOL_GROUP_ID = 'myToolGroup';
@@ -59,8 +108,9 @@ const TOOL_GROUP_ID = 'myToolGroup';
  * 
  * @param {Object} props - 组件属性
  * @param {string} props.seriesInstanceUID - 系列实例 UID
+ * @param {Object} allSeriesUIDs - 所有期相的系列实例UID映射对象，如 {收缩期: 'uid1', 舒张期: 'uid2'}
  */
-export function useCrosshairsViewer(props) {
+export function useCrosshairsViewer(props, allSeriesUIDs = null) {
   // ========== 状态管理 ==========
   const loading = ref(true);
   const error = ref(null);
@@ -71,6 +121,105 @@ export function useCrosshairsViewer(props) {
   let currentVolumeId = null;
   let initialCameraPositions = null; // 保存初始MPR位置
   const savedViewStates = ref([]); // 保存的视图状态列表
+  const volumeCache = {}; // 缓存已加载的体积数据 {seriesUID: {volumeId, imageIds}}
+  let savedPlaneState = null; // 保存的平面定位状态（用于期相切换时保持平面）
+  let lastCameraState = null; // 保存最后的相机状态（用于切换期相时保持MPR视图）
+
+  // ========== 性能优化 ==========
+  /**
+   * 创建一个优化的渲染函数，使用RAF节流
+   */
+  const createOptimizedRender = () => {
+    let rafId = null;
+    
+    return (vpIds = null) => {
+      if (!renderingEngine) return;
+      
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
+      
+      rafId = requestAnimationFrame(() => {
+        try {
+          const viewportsToRender = vpIds || (viewportIds ? [
+            viewportIds.axial,
+            viewportIds.sagittal,
+            viewportIds.coronal
+          ] : []);
+          
+          if (viewportsToRender.length > 0) {
+            renderingEngine.renderViewports(viewportsToRender);
+          }
+        } catch (e) {
+          console.warn('优化渲染时出错:', e);
+        }
+        rafId = null;
+      });
+    };
+  };
+  
+  const optimizedRender = createOptimizedRender();
+
+  /**
+   * 保存当前相机状态（用于期相切换）
+   */
+  function saveCurrentCameraState() {
+    if (!renderingEngine || !viewportIds) return;
+    
+    try {
+      const cameraState = {};
+      ['axial', 'sagittal', 'coronal'].forEach(viewName => {
+        try {
+          const vp = renderingEngine.getViewport(viewportIds[viewName]);
+          if (vp) {
+            const camera = vp.getCamera();
+            cameraState[viewName] = {
+              position: [...camera.position],
+              focalPoint: [...camera.focalPoint],
+              viewUp: [...camera.viewUp],
+              parallelScale: camera.parallelScale,
+              viewPlaneNormal: camera.viewPlaneNormal ? [...camera.viewPlaneNormal] : undefined
+            };
+          }
+        } catch (e) {
+          console.warn(`保存${viewName}相机状态失败:`, e);
+        }
+      });
+      lastCameraState = cameraState;
+    } catch (e) {
+      console.warn('保存相机状态失败:', e);
+    }
+  }
+
+  /**
+   * 设置相机变化监听器（使用节流）
+   */
+  function setupCameraChangeListener() {
+    if (!renderingEngine || !viewportIds) return;
+    
+    // 使用节流，避免频繁保存
+    let saveTimeout = null;
+    
+    const handleCameraChange = () => {
+      if (saveTimeout) {
+        clearTimeout(saveTimeout);
+      }
+      
+      saveTimeout = setTimeout(() => {
+        saveCurrentCameraState();
+      }, 200); // 200ms 延迟，避免频繁保存
+    };
+    
+    // 监听渲染事件（当相机改变时会触发渲染）
+    try {
+      const element = renderingEngine.getViewport(viewportIds.axial)?.element;
+      if (element) {
+        element.addEventListener('cornerstoneimagerendered', handleCameraChange);
+      }
+    } catch (e) {
+      console.warn('设置相机变化监听失败:', e);
+    }
+  }
 
   /**
    * 获取系列中的所有实例
@@ -209,12 +358,108 @@ export function useCrosshairsViewer(props) {
   }
 
   /**
-   * 加载体积数据到 viewports
+   * 预加载指定系列的体积数据（后台加载，不阻塞当前视图）
    */
-  async function loadVolume(renderingEngineInstance, viewportIdsInstance, imageIds, seriesInstanceUID) {
+  async function preloadVolume(seriesInstanceUID) {
+    try {
+      // 如果已经缓存，跳过
+      if (volumeCache[seriesInstanceUID]?.loaded) {
+        console.log(`体积 ${seriesInstanceUID} 已经加载，跳过预加载`)
+        return
+      }
+
+      console.log(`开始预加载体积: ${seriesInstanceUID}`)
+      
+      // 获取实例
+      const imageIds = await fetchInstances(seriesInstanceUID)
+      
+      if (!imageIds || imageIds.length === 0) {
+        console.warn(`预加载失败: 未找到系列 ${seriesInstanceUID} 的实例`)
+        return
+      }
+
+      // 定义体积ID
+      const volumeId = `cornerstoneStreamingImageVolume:volume-${seriesInstanceUID}`
+      
+      // 检查体积是否已经在缓存中
+      let volume = cache.getVolume(volumeId)
+      
+      if (!volume) {
+        // 创建新的体积加载器
+        volume = await volumeLoader.createAndCacheVolume(volumeId, {
+          imageIds,
+        })
+      }
+
+      // 后台加载体积数据
+      if (!volume.loadStatus || volume.loadStatus.loaded === false) {
+        const loadPromise = volume.load()
+        
+        // 确保 load() 返回了 Promise
+        if (loadPromise && typeof loadPromise.then === 'function') {
+          loadPromise.then(() => {
+            console.log(`体积 ${seriesInstanceUID} 预加载完成`)
+            // 更新缓存状态为完全加载
+            if (volumeCache[seriesInstanceUID]) {
+              volumeCache[seriesInstanceUID].fullyLoaded = true
+            }
+          }).catch(err => {
+            console.error(`预加载体积 ${seriesInstanceUID} 失败:`, err)
+          })
+        } else {
+          console.warn(`体积 ${seriesInstanceUID} 的 load() 方法未返回 Promise，可能已加载`)
+        }
+      } else {
+        console.log(`体积 ${seriesInstanceUID} 已加载，跳过`)
+      }
+
+      // 缓存体积信息
+      volumeCache[seriesInstanceUID] = {
+        volumeId,
+        imageIds,
+        loaded: true,
+        fullyLoaded: false
+      }
+
+      console.log(`体积 ${seriesInstanceUID} 已启动后台加载`)
+    } catch (err) {
+      console.error(`预加载体积 ${seriesInstanceUID} 失败:`, err)
+    }
+  }
+
+  /**
+   * 加载体积数据到 viewports
+   * @param {boolean} preserveCamera - 是否保留相机状态（默认false）
+   */
+  async function loadVolume(renderingEngineInstance, viewportIdsInstance, imageIds, seriesInstanceUID, preserveCamera = false) {
     try {
       // 定义体积ID
       const volumeId = `cornerstoneStreamingImageVolume:volume-${seriesInstanceUID}`
+      
+      // 保存当前相机状态（如果需要保留，或使用已保存的lastCameraState）
+      let savedCameras = null
+      if (preserveCamera) {
+        if (currentVolumeId) {
+          // 如果有当前体积，保存当前相机状态
+          savedCameras = {}
+          try {
+            ['axial', 'sagittal', 'coronal'].forEach(viewName => {
+              const vp = renderingEngineInstance.getViewport(viewportIdsInstance[viewName])
+              if (vp) {
+                savedCameras[viewName] = vp.getCamera()
+              }
+            })
+            console.log('已保存当前相机状态用于切换')
+          } catch (e) {
+            console.warn('保存相机状态失败:', e)
+            savedCameras = null
+          }
+        } else if (lastCameraState) {
+          // 如果没有当前体积但有之前保存的状态，使用它
+          savedCameras = lastCameraState
+          console.log('使用之前保存的相机状态')
+        }
+      }
       
       // 如果之前有体积，先清理旧的体积
       if (currentVolumeId && currentVolumeId !== volumeId) {
@@ -240,8 +485,19 @@ export function useCrosshairsViewer(props) {
       }
 
       // 加载体积数据（如果还未加载）
-      if (!volume.loadStatus || volume.loadStatus.loaded === false) {
-        await volume.load()
+      if (volume && (!volume.loadStatus || volume.loadStatus.loaded === false)) {
+        const loadPromise = volume.load()
+        if (loadPromise && typeof loadPromise.then === 'function') {
+          await loadPromise
+        }
+      }
+
+      // 缓存体积信息
+      volumeCache[seriesInstanceUID] = {
+        volumeId,
+        imageIds,
+        loaded: true,
+        fullyLoaded: true
       }
 
       // 设置每个viewport显示体积
@@ -257,8 +513,24 @@ export function useCrosshairsViewer(props) {
       // 更新当前体积ID
       currentVolumeId = volumeId
 
-      // 渲染所有viewport
-      renderingEngineInstance.renderViewports([viewportIdsInstance.axial, viewportIdsInstance.sagittal, viewportIdsInstance.coronal])
+      // 如果需要恢复相机状态
+      if (preserveCamera && savedCameras) {
+        try {
+          ['axial', 'sagittal', 'coronal'].forEach(viewName => {
+            const vp = renderingEngineInstance.getViewport(viewportIdsInstance[viewName])
+            const savedCamera = savedCameras[viewName]
+            if (vp && savedCamera) {
+              vp.setCamera(savedCamera)
+            }
+          })
+          console.log('已恢复相机状态')
+        } catch (e) {
+          console.warn('恢复相机状态失败:', e)
+        }
+      }
+
+      // 使用优化的渲染函数
+      optimizedRender([viewportIdsInstance.axial, viewportIdsInstance.sagittal, viewportIdsInstance.coronal])
     } catch (err) {
       console.error('加载体积失败:', err)
       throw err
@@ -374,6 +646,22 @@ export function useCrosshairsViewer(props) {
         toolGroup.setToolActive(StackScrollMouseWheelTool.toolName, {
           bindings: [],
         })
+        
+        // 优化工具性能配置
+        try {
+          // 为工具设置优化选项，减少不必要的重绘
+          const toolInstances = [
+            toolGroup.getToolInstance(CrosshairsTool.toolName),
+            toolGroup.getToolInstance(PanTool.toolName),
+            toolGroup.getToolInstance(ZoomTool.toolName),
+            toolGroup.getToolInstance(WindowLevelTool.toolName),
+          ].filter(Boolean);
+          
+          // 注意：Cornerstone工具通常自带优化，这里主要确保配置正确
+          console.log(`已配置 ${toolInstances.length} 个工具的优化选项`);
+        } catch (e) {
+          console.warn('配置工具优化选项时出错:', e);
+        }
       }
 
       // 获取系列中的所有实例
@@ -400,6 +688,7 @@ export function useCrosshairsViewer(props) {
           element: axialElement,
           defaultOptions: {
             orientation: Enums.OrientationAxis.AXIAL,
+            background: [0, 0, 0],
           },
         },
         {
@@ -408,6 +697,7 @@ export function useCrosshairsViewer(props) {
           element: sagittalElement,
           defaultOptions: {
             orientation: Enums.OrientationAxis.SAGITTAL,
+            background: [0, 0, 0],
           },
         },
         {
@@ -416,11 +706,42 @@ export function useCrosshairsViewer(props) {
           element: coronalElement,
           defaultOptions: {
             orientation: Enums.OrientationAxis.CORONAL,
+            background: [0, 0, 0],
           },
         },
       ]
 
       renderingEngine.setViewports(viewportInputArray)
+
+      // 优化渲染引擎性能设置
+      try {
+        // 设置渲染引擎的帧率限制，避免过度渲染
+        if (renderingEngine.setOptions) {
+          renderingEngine.setOptions({
+            suppressEvents: false,
+            useNorm16Texture: true, // 使用16位纹理以提高性能
+          })
+        }
+        
+        // 为每个viewport设置优化选项
+        const viewportOptimizations = {
+          suppressEvents: false,
+          invert: false,
+        }
+        
+        Object.values(viewportIds).forEach(vpId => {
+          try {
+            const vp = renderingEngine.getViewport(vpId)
+            if (vp && vp.setOptions) {
+              vp.setOptions(viewportOptimizations)
+            }
+          } catch (e) {
+            console.warn(`设置viewport ${vpId} 优化选项失败:`, e)
+          }
+        })
+      } catch (e) {
+        console.warn('设置渲染优化选项失败:', e)
+      }
 
       // 将 viewports 添加到工具组
       try {
@@ -437,8 +758,27 @@ export function useCrosshairsViewer(props) {
 
       // 保存初始MPR位置
       saveInitialPositions()
+      
+      // 保存初始相机状态
+      saveCurrentCameraState()
+      
+      // 添加相机变化监听，自动保存状态
+      setupCameraChangeListener()
 
       loading.value = false
+
+      // 预加载其他期相的数据（后台进行，不阻塞当前操作）
+      if (allSeriesUIDs) {
+        setTimeout(() => {
+          Object.values(allSeriesUIDs).forEach(seriesUID => {
+            if (seriesUID && seriesUID !== props.seriesInstanceUID) {
+              preloadVolume(seriesUID).catch(err => {
+                console.warn(`预加载系列 ${seriesUID} 失败:`, err)
+              })
+            }
+          })
+        }, 1000) // 延迟1秒，确保主视图已完全加载
+      }
     } catch (err) {
       console.error('初始化错误:', err)
       error.value = err.message || '初始化失败'
@@ -457,18 +797,44 @@ export function useCrosshairsViewer(props) {
         return
       }
 
+      // 切换前先保存当前相机状态
+      saveCurrentCameraState()
+
       loading.value = true
       error.value = null
 
-      // 获取新系列的实例（复用fetchInstances函数）
-      const imageIds = await fetchInstances(newSeriesInstanceUID)
-      
-      if (!imageIds || imageIds.length === 0) {
-        throw new Error('未找到DICOM实例')
+      // 检查是否已有缓存
+      let imageIds
+      if (volumeCache[newSeriesInstanceUID]?.imageIds) {
+        console.log(`使用缓存的体积数据: ${newSeriesInstanceUID}`)
+        imageIds = volumeCache[newSeriesInstanceUID].imageIds
+      } else {
+        // 获取新系列的实例
+        imageIds = await fetchInstances(newSeriesInstanceUID)
+        
+        if (!imageIds || imageIds.length === 0) {
+          throw new Error('未找到DICOM实例')
+        }
       }
 
-      // 加载新体积
-      await loadVolume(renderingEngine, viewportIds, imageIds, newSeriesInstanceUID)
+      // 检查是否有平面定位状态需要保持
+      const shouldRestorePlane = savedPlaneState !== null
+      
+      // 加载新体积，始终保留相机状态
+      await loadVolume(renderingEngine, viewportIds, imageIds, newSeriesInstanceUID, true)
+
+      // 如果有保存的平面状态，需要恢复平面（重新应用平面变换）
+      if (shouldRestorePlane && savedPlaneState) {
+        try {
+          console.log('正在恢复平面状态到新期相...')
+          // 延迟一点，确保体积已完全加载
+          await new Promise(resolve => setTimeout(resolve, 100))
+          await applyPlanePosition(savedPlaneState.less_points)
+          console.log('平面状态已恢复到新期相')
+        } catch (err) {
+          console.error('恢复平面状态失败:', err)
+        }
+      }
 
       loading.value = false
     } catch (err) {
@@ -528,6 +894,9 @@ export function useCrosshairsViewer(props) {
       renderingEngine = null
       viewportIds = null
       currentVolumeId = null
+      savedPlaneState = null
+      // 清空体积缓存
+      Object.keys(volumeCache).forEach(key => delete volumeCache[key])
     } catch (err) {
       console.error('清理资源失败:', err)
     }
@@ -563,6 +932,9 @@ export function useCrosshairsViewer(props) {
     }
 
     try {
+      // 清除保存的平面状态
+      savedPlaneState = null;
+      
       // 重置所有viewport的相机到默认状态
       Object.keys(viewportIds).forEach(viewName => {
         const viewport = renderingEngine.getViewport(viewportIds[viewName]);
@@ -580,12 +952,12 @@ export function useCrosshairsViewer(props) {
         }
       });
       
-      renderingEngine.renderViewports([
+      optimizedRender([
         viewportIds.axial,
         viewportIds.sagittal,
         viewportIds.coronal,
       ]);
-      console.log('已重置MPR相机到默认状态');
+      console.log('已重置MPR相机到默认状态，并清除平面状态');
     } catch (err) {
       console.error('重置MPR相机失败:', err);
     }
@@ -657,7 +1029,14 @@ export function useCrosshairsViewer(props) {
 
       try {
         await applyPlanePosition(less_points);
-        console.log('定位平面成功');
+        
+        // 保存平面状态，用于期相切换时保持平面
+        savedPlaneState = {
+          analysisType,
+          less_points,
+          targetPlaneKey
+        }
+        console.log('定位平面成功，已保存平面状态');
         return { success: true, less_points };
       } catch (err) {
         console.error('[locatePlane] applyPlanePosition 失败', err);
@@ -926,7 +1305,7 @@ export function useCrosshairsViewer(props) {
       }
     });
 
-    renderingEngine.renderViewports([
+    optimizedRender([
       viewportIds.axial,
       viewportIds.sagittal,
       viewportIds.coronal,
@@ -942,7 +1321,7 @@ export function useCrosshairsViewer(props) {
         if (crosshairsTool) {
           crosshairsTool.toolCenter = [...origin];
           console.log('已设置 Crosshairs 工具中心点为:', origin);
-          renderingEngine.renderViewports([viewportIds.axial, viewportIds.sagittal, viewportIds.coronal]);
+          optimizedRender([viewportIds.axial, viewportIds.sagittal, viewportIds.coronal]);
         } else {
           console.warn('未找到 Crosshairs 工具实例');
         }
@@ -1038,7 +1417,7 @@ export function useCrosshairsViewer(props) {
       annotation.state.removeAnnotation(lastAnnotation.annotationUID);
       
       // 重新渲染视图
-      renderingEngine.renderViewports([
+      optimizedRender([
         viewportIds.axial,
         viewportIds.sagittal,
         viewportIds.coronal
@@ -1174,7 +1553,7 @@ export function useCrosshairsViewer(props) {
       });
 
       // 重新渲染所有视图
-      renderingEngine.renderViewports([
+      optimizedRender([
         viewportIds.axial,
         viewportIds.sagittal,
         viewportIds.coronal

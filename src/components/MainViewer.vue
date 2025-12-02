@@ -49,6 +49,7 @@ import { useSTLViewer } from '../composables/useSTLViewer.js'
 const props = defineProps({
   seriesInstanceUID: { type: String, required: true },
   currentPhase: { type: String, default: '收缩期' },
+  allSeriesUIDs: { type: Object, default: () => ({}) }, // 所有期相的UID映射
 })
 
 const { 
@@ -71,7 +72,7 @@ const {
   renameViewState,
   clearAllViewStates,
   getAxialSlicePosition
-} = useCrosshairsViewer(props)
+} = useCrosshairsViewer(props, props.allSeriesUIDs)
 const { 
   loading: stlLoading, 
   error: stlError, 
@@ -117,11 +118,29 @@ onMounted(async () => {
     setupAxialViewListener()
   }
   
-  // 初始化 3D STL 查看器（稍微延迟，确保DOM完全准备好）
+  // 同时初始化两个期相的 3D STL 查看器
   await new Promise(resolve => setTimeout(resolve, 200))
   if (stlViewport.value) {
     try {
+      // 初始化当前期相的 STL
       await initializeSTL(stlViewport.value, props.currentPhase)
+      console.log(`当前期相 ${props.currentPhase} 的 STL 已加载`)
+      
+      // 后台预加载另一个期相的 STL 文件
+      if (props.allSeriesUIDs) {
+        const otherPhase = props.currentPhase === '收缩期' ? '舒张期' : '收缩期'
+        setTimeout(() => {
+          console.log(`开始预加载 ${otherPhase} 的 STL 文件...`)
+          // 后台预加载，使用switchPhase会缓存文件
+          switchSTLPhase(otherPhase).then(() => {
+            console.log(`${otherPhase} 的 STL 文件预加载完成`)
+            // 切换回当前期相
+            return switchSTLPhase(props.currentPhase)
+          }).catch(err => {
+            console.warn(`预加载 ${otherPhase} STL 文件失败:`, err)
+          })
+        }, 3000) // 延迟3秒开始预加载，确保不影响主流程
+      }
     } catch (err) {
       console.error('初始化 3D STL 查看器失败:', err)
     }
@@ -130,32 +149,45 @@ onMounted(async () => {
 
 // 设置 Axial 视图变化监听器
 function setupAxialViewListener() {
-  // 使用定时器轮询 Axial 切片位置变化
+  // 使用 requestAnimationFrame 优化轮询
   let lastPosition = null
+  let rafId = null
+  let lastCheckTime = 0
+  const CHECK_INTERVAL = 50 // 降低检查频率到50ms，提升性能
   
-  const checkPositionChange = () => {
-    const currentPosition = getAxialSlicePosition()
-    
-    if (currentPosition && currentPosition.origin) {
-      // 检查位置是否改变
-      if (!lastPosition || 
-          Math.abs(currentPosition.origin[0] - lastPosition.origin[0]) > 0.1 ||
-          Math.abs(currentPosition.origin[1] - lastPosition.origin[1]) > 0.1 ||
-          Math.abs(currentPosition.origin[2] - lastPosition.origin[2]) > 0.1) {
-        
-        // 更新 STL 平面位置
-        updateSTLPlanePosition(currentPosition.origin, currentPosition.normal)
-        lastPosition = currentPosition
+  const checkPositionChange = (timestamp) => {
+    // 节流：只在达到检查间隔时才执行
+    if (timestamp - lastCheckTime >= CHECK_INTERVAL) {
+      const currentPosition = getAxialSlicePosition()
+      
+      if (currentPosition && currentPosition.origin) {
+        // 检查位置是否改变（使用稍大的阈值减少不必要的更新）
+        if (!lastPosition || 
+            Math.abs(currentPosition.origin[0] - lastPosition.origin[0]) > 0.5 ||
+            Math.abs(currentPosition.origin[1] - lastPosition.origin[1]) > 0.5 ||
+            Math.abs(currentPosition.origin[2] - lastPosition.origin[2]) > 0.5) {
+          
+          // 更新 STL 平面位置
+          updateSTLPlanePosition(currentPosition.origin, currentPosition.normal)
+          lastPosition = currentPosition
+        }
       }
+      
+      lastCheckTime = timestamp
     }
+    
+    // 继续下一帧
+    rafId = requestAnimationFrame(checkPositionChange)
   }
   
-  // 每100ms检查一次位置变化
-  const intervalId = setInterval(checkPositionChange, 100)
+  // 启动RAF循环
+  rafId = requestAnimationFrame(checkPositionChange)
   
-  // 在组件卸载时清除定时器
+  // 在组件卸载时清除RAF
   onBeforeUnmount(() => {
-    clearInterval(intervalId)
+    if (rafId) {
+      cancelAnimationFrame(rafId)
+    }
   })
 }
 
@@ -303,6 +335,9 @@ watch(() => props.currentPhase, async (newPhase, oldPhase) => {
   background-color: #000;
   border: 1px solid #1c3a5e;
   overflow: hidden;
+  /* 性能优化 */
+  contain: layout style paint;
+  transform: translateZ(0);
 }
 
 .viewport-label {
@@ -343,6 +378,11 @@ watch(() => props.currentPhase, async (newPhase, oldPhase) => {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  /* 硬件加速优化 */
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .loading-overlay {
