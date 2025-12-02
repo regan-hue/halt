@@ -423,7 +423,150 @@ export async function exportReportPDF(reportData, filename = 'halt-report') {
         ...tableStyles,
         headStyles: { ...tableStyles.headStyles, fillColor: [52, 152, 219] }
       });
+      yPos = doc.lastAutoTable.finalY + 10;
     }
+  }
+
+  // 保存的图像
+  if (reportData.savedImages && reportData.savedImages.length > 0) {
+    console.log(`📷 开始添加 ${reportData.savedImages.length} 张图像到PDF`);
+    const images = reportData.savedImages;
+    
+    // 2列布局配置
+    const colCount = 2;
+    const colGap = 10;
+    const colWidth = (pageWidth - marginLeft - marginRight - (colCount - 1) * colGap) / colCount;
+    let currentRowMaxHeight = 0;
+    
+    for (let i = 0; i < images.length; i++) {
+      const image = images[i];
+      const colIndex = i % colCount;
+      
+      // 如果是新的一行，检查页面剩余空间
+      // 预估每行高度约 90mm (包含文字和图片)
+      if (colIndex === 0) {
+        if (yPos > pageHeight - 90) { 
+          doc.addPage(); 
+          yPos = 20; 
+        }
+        currentRowMaxHeight = 0;
+      }
+
+      const xPos = marginLeft + colIndex * (colWidth + colGap);
+      let currentY = yPos;
+
+      console.log(`处理图像 ${i + 1}/${images.length}:`, {
+        title: image.title,
+        viewType: image.viewType,
+        colIndex
+      });
+      
+      // 1. 标题
+      doc.setFontSize(11);
+      doc.setTextColor(41, 128, 185);
+      const title = fontLoaded ? `图像 ${i + 1}: ${image.title}` : `Image ${i + 1}: ${image.title}`;
+      const titleLines = doc.splitTextToSize(title, colWidth);
+      doc.text(titleLines, xPos, currentY);
+      currentY += titleLines.length * 5 + 2;
+      
+      // 2. 元数据
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      const metaText = `${image.viewType} | ${image.phase || ''}`;
+      doc.text(metaText, xPos, currentY);
+      currentY += 5;
+      
+      // 3. 描述
+      if (image.description && fontLoaded) {
+        doc.setFontSize(8);
+        doc.setTextColor(80, 80, 80);
+        const descLines = doc.splitTextToSize(image.description, colWidth);
+        doc.text(descLines, xPos, currentY);
+        currentY += descLines.length * 4 + 2;
+      }
+      
+      // 4. 图片
+      try {
+        if (!image.dataUrl || typeof image.dataUrl !== 'string' || !/^data:image\/(png|jpeg|jpg|svg\+xml);base64,/.test(image.dataUrl)) {
+          throw new Error('图像数据无效或格式不支持');
+        }
+
+        let naturalWidth = 400, naturalHeight = 300;
+        if (/^data:image\/svg\+xml/.test(image.dataUrl)) {
+          const svgText = atob(image.dataUrl.split(',')[1]);
+          const matchW = svgText.match(/width=["'](\d+)["']/);
+          const matchH = svgText.match(/height=["'](\d+)["']/);
+          if (matchW) naturalWidth = parseInt(matchW[1]);
+          if (matchH) naturalHeight = parseInt(matchH[1]);
+        } else {
+          const img = new window.Image();
+          img.src = image.dataUrl;
+          await new Promise(resolve => {
+            if (img.complete) resolve();
+            else img.onload = resolve;
+          });
+          naturalWidth = img.naturalWidth || img.width || 400;
+          naturalHeight = img.naturalHeight || img.height || 300;
+        }
+
+        // 计算显示尺寸
+        // 宽度固定为 colWidth
+        let drawWidth = colWidth;
+        let drawHeight = (naturalHeight / naturalWidth) * drawWidth;
+        
+        // 限制最大高度，防止单张图片过高 (60mm)
+        const maxImageHeight = 60; 
+        if (drawHeight > maxImageHeight) {
+            drawHeight = maxImageHeight;
+            drawWidth = (naturalWidth / naturalHeight) * drawHeight;
+        }
+        
+        // 在列内居中图片
+        const imgX = xPos + (colWidth - drawWidth) / 2;
+
+        // 绘制图片
+        if (/^data:image\/svg\+xml/.test(image.dataUrl)) {
+          const canvas = document.createElement('canvas');
+          canvas.width = naturalWidth;
+          canvas.height = naturalHeight;
+          const ctx = canvas.getContext('2d');
+          const imgSvg = new window.Image();
+          imgSvg.src = image.dataUrl;
+          await new Promise(resolve => {
+            if (imgSvg.complete) resolve();
+            else imgSvg.onload = resolve;
+          });
+          ctx.drawImage(imgSvg, 0, 0);
+          const pngDataUrl = canvas.toDataURL('image/png');
+          doc.addImage(pngDataUrl, 'PNG', imgX, currentY, drawWidth, drawHeight);
+        } else {
+          doc.addImage(image.dataUrl, 'PNG', imgX, currentY, drawWidth, drawHeight);
+        }
+        
+        const itemHeight = (currentY - yPos) + drawHeight; // 相对于行起始 yPos 的高度
+        if (itemHeight > currentRowMaxHeight) {
+            currentRowMaxHeight = itemHeight;
+        }
+
+      } catch (err) {
+        console.error('❌ 添加图像到PDF失败:', err, '图像:', image.title);
+        doc.setFontSize(9);
+        doc.setTextColor(255, 0, 0);
+        doc.text('[图像加载失败]', xPos, currentY);
+        const itemHeight = (currentY - yPos) + 10;
+        if (itemHeight > currentRowMaxHeight) {
+            currentRowMaxHeight = itemHeight;
+        }
+      }
+      
+      // 如果是行末或最后一个元素，更新 yPos
+      if (colIndex === colCount - 1 || i === images.length - 1) {
+          yPos += currentRowMaxHeight + 10;
+      }
+    }
+    console.log('✅ 所有图像处理完成');
+  } else {
+    console.log('⚠️ 没有保存的图像需要添加到PDF');
   }
 
   // 页脚
@@ -699,6 +842,23 @@ function generateReportText(reportData) {
     text += '\n';
   }
   
+  // 保存的图像信息
+  if (reportData.savedImages && reportData.savedImages.length > 0) {
+    text += '六、保存的图像\n';
+    text += '-'.repeat(60) + '\n';
+    reportData.savedImages.forEach((image, index) => {
+      text += `图像 ${index + 1}:\n`;
+      text += `  标题: ${image.title}\n`;
+      text += `  视图类型: ${image.viewType}\n`;
+      text += `  期相: ${image.phase || '-'}\n`;
+      if (image.description) {
+        text += `  描述: ${image.description}\n`;
+      }
+      text += `  保存时间: ${new Date(image.timestamp).toLocaleString('zh-CN')}\n`;
+      text += '\n';
+    });
+  }
+  
   text += '='.repeat(60) + '\n';
   text += `报告生成时间: ${new Date().toLocaleString('zh-CN')}\n`;
   text += '='.repeat(60) + '\n';
@@ -720,11 +880,25 @@ function formatValue(val) {
  * 收集所有报告数据
  * @param {Object} sidebarData - Sidebar组件的数据
  * @param {Object} geometricData - 几何数据（可以是单期相或两期相的数据）
+ * @param {Array} savedImages - 保存的图像数组
  * @returns {Object} 完整的报告数据
  */
-export function collectReportData(sidebarData, geometricData = null) {
+export function collectReportData(sidebarData, geometricData = null, savedImages = []) {
   // 判断是否包含两期相数据
   const hasBothPhases = geometricData && geometricData.systolic && geometricData.diastolic;
+  
+  console.log('📊 收集报告数据:');
+  console.log('  - 保存的图像数量:', savedImages?.length || 0);
+  if (savedImages && savedImages.length > 0) {
+    savedImages.forEach((img, idx) => {
+      console.log(`  - 图像 ${idx + 1}:`, {
+        title: img.title,
+        viewType: img.viewType,
+        hasData: !!img.dataUrl,
+        dataLength: img.dataUrl?.length || 0
+      });
+    });
+  }
   
   return {
     basicInfo: {
@@ -769,6 +943,7 @@ export function collectReportData(sidebarData, geometricData = null) {
       implantDepth: sidebarData.implantDepth?.value || sidebarData.implantDepth,
       morphologyChange: sidebarData.morphologyChange?.value || sidebarData.morphologyChange
     },
+    savedImages: savedImages || [],
     measurements: [],
     metadata: {
       phase: sidebarData.currentPhase?.value || sidebarData.currentPhase,

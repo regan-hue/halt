@@ -3,13 +3,33 @@
     <div class="viewport-grid">
       <div class="viewport-container">
         <div class="viewport-header">
-          <div class="viewport-label">AXIAL</div>
-          <div class="viewport-indicator" :style="{ backgroundColor: getLabelColor('AXIAL') }"></div>
+          <div class="viewport-header-left">
+            <div class="viewport-label">AXIAL</div>
+            <div class="viewport-indicator" :style="{ backgroundColor: getLabelColor('AXIAL') }"></div>
+          </div>
+          <button class="save-image-btn" @click="openSaveImageDialog('AXIAL', viewport1)" title="保存图像">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+              <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+          </button>
         </div>
         <div class="viewport-element" ref="viewport1"></div>
       </div>
       <div class="viewport-container stl-viewport">
-        <!-- <div class="viewport-label">3D MODEL</div> -->
+        <div class="viewport-header">
+          <div class="viewport-header-left">
+            <div class="viewport-label">3D MODEL</div>
+          </div>
+          <button class="save-image-btn" @click="openSaveImageDialog('STL', stlViewport)" title="保存图像">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+              <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+          </button>
+        </div>
         <div class="viewport-element" ref="stlViewport"></div>
         <div v-if="stlLoading" class="stl-loading">
           <div class="spinner"></div>
@@ -19,15 +39,33 @@
       </div>
       <div class="viewport-container">
         <div class="viewport-header">
-          <div class="viewport-label">CORONAL</div>
-          <div class="viewport-indicator" :style="{ backgroundColor: getLabelColor('CORONAL') }"></div>
+          <div class="viewport-header-left">
+            <div class="viewport-label">CORONAL</div>
+            <div class="viewport-indicator" :style="{ backgroundColor: getLabelColor('CORONAL') }"></div>
+          </div>
+          <button class="save-image-btn" @click="openSaveImageDialog('CORONAL', viewport3)" title="保存图像">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+              <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+          </button>
         </div>
         <div class="viewport-element" ref="viewport3"></div>
       </div>
       <div class="viewport-container">
         <div class="viewport-header">
-          <div class="viewport-label">SAGITTAL</div>
-          <div class="viewport-indicator" :style="{ backgroundColor: getLabelColor('SAGITTAL') }"></div>
+          <div class="viewport-header-left">
+            <div class="viewport-label">SAGITTAL</div>
+            <div class="viewport-indicator" :style="{ backgroundColor: getLabelColor('SAGITTAL') }"></div>
+          </div>
+          <button class="save-image-btn" @click="openSaveImageDialog('SAGITTAL', viewport2)" title="保存图像">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+              <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+          </button>
         </div>
         <div class="viewport-element" ref="viewport2"></div>
       </div>
@@ -38,6 +76,37 @@
       <p>加载中...</p>
       <p v-if="error" class="error-text">{{ error }}</p>
     </div>
+
+    <!-- 保存图像对话框 -->
+    <div v-if="showSaveDialog" class="dialog-overlay" @click="closeSaveImageDialog">
+      <div class="dialog-content" @click.stop>
+        <div class="dialog-header">
+          <h3>保存图像 - {{ currentSaveView }}</h3>
+          <button class="close-btn" @click="closeSaveImageDialog">&times;</button>
+        </div>
+        <div class="dialog-body">
+          <div class="form-group">
+            <label>图像标题：</label>
+            <input v-model="imageTitle" type="text" placeholder="输入图像标题" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label>图像描述：</label>
+            <textarea v-model="imageDescription" placeholder="输入图像描述" class="form-textarea" rows="3" maxlength="50"></textarea>
+            <div class="char-count">{{ imageDescription.length }}/50</div>
+          </div>
+          <div class="image-preview">
+            <img v-if="previewImageUrl" :src="previewImageUrl" alt="预览" />
+            <div v-else class="preview-placeholder">
+              <p>正在捕获图像...</p>
+            </div>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button @click="closeSaveImageDialog" class="btn btn-cancel">取消</button>
+          <button @click="confirmSaveImage" class="btn btn-primary">保存</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -45,12 +114,23 @@
 import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useCrosshairsViewer } from '../composables/useCrosshairsViewer.js'
 import { useSTLViewer } from '../composables/useSTLViewer.js'
+import { useSavedImages } from '../composables/useSavedImages.js'
+import { getRenderingEngine } from '@cornerstonejs/core'
 
 const props = defineProps({
   seriesInstanceUID: { type: String, required: true },
   currentPhase: { type: String, default: '收缩期' },
   allSeriesUIDs: { type: Object, default: () => ({}) }, // 所有期相的UID映射
 })
+
+// 图像保存相关
+const { saveImage } = useSavedImages()
+const showSaveDialog = ref(false)
+const currentSaveView = ref('')
+const currentViewportRef = ref(null)
+const imageTitle = ref('')
+const imageDescription = ref('')
+const previewImageUrl = ref('')
 
 const { 
   loading, 
@@ -82,6 +162,7 @@ const {
   showPlane: showSTLPlane,
   hidePlane: hideSTLPlane,
   updatePlanePosition: updateSTLPlanePosition,
+  captureImage: captureSTLImage,
   cleanup: cleanupSTL 
 } = useSTLViewer()
 
@@ -190,6 +271,194 @@ function setupAxialViewListener() {
       cancelAnimationFrame(rafId)
     }
   })
+}
+
+/**
+ * 打开保存图像对话框
+ */
+async function openSaveImageDialog(viewType, viewportRef, retryCount = 0) {
+  console.log('打开保存对话框:', viewType)
+  
+  currentSaveView.value = viewType
+  currentViewportRef.value = viewportRef
+  
+  // 设置默认标题
+  imageTitle.value = `${viewType} 视图 - ${props.currentPhase}`
+  imageDescription.value = ''
+  
+  // 重置预览图像
+  previewImageUrl.value = ''
+  
+  // 先显示对话框
+  showSaveDialog.value = true
+  
+  // 延迟捕获图像
+  await nextTick()
+  await new Promise(resolve => setTimeout(resolve, 100))
+  
+  // 使用Cornerstone API捕获图像
+  captureViewportImage(viewType)
+}
+
+/**
+ * 关闭保存图像对话框
+ */
+function closeSaveImageDialog() {
+  showSaveDialog.value = false
+  imageTitle.value = ''
+  imageDescription.value = ''
+  previewImageUrl.value = ''
+  currentSaveView.value = ''
+  currentViewportRef.value = null
+}
+
+/**
+ * 使用Cornerstone API捕获viewport图像
+ */
+async function captureViewportImage(viewType) {
+  console.log('使用Cornerstone API捕获图像:', viewType)
+  
+  try {
+    // 获取rendering engine
+    const renderingEngine = getRenderingEngine('myRenderingEngine')
+    if (!renderingEngine) {
+      console.error('❌ 未找到rendering engine')
+      alert('渲染引擎未初始化')
+      previewImageUrl.value = ''
+      return
+    }
+    
+    // 根据viewType获取对应的viewportId
+    let viewportId = ''
+    if (viewType === 'AXIAL') {
+      viewportId = 'axial-viewport'
+    } else if (viewType === 'SAGITTAL') {
+      viewportId = 'sagittal-viewport'
+    } else if (viewType === 'CORONAL') {
+      viewportId = 'coronal-viewport'
+    } else if (viewType === 'STL') {
+      // STL视图使用VTK的captureImage方法
+      await captureSTLImageFromVTK()
+      return
+    }
+    
+    if (!viewportId) {
+      console.error('❌ 无效的viewType:', viewType)
+      alert('无效的视图类型')
+      previewImageUrl.value = ''
+      return
+    }
+    
+    console.log('获取viewport:', viewportId)
+    const viewport = renderingEngine.getViewport(viewportId)
+    if (!viewport) {
+      console.error('❌ 未找到viewport:', viewportId)
+      alert('视图未初始化')
+      previewImageUrl.value = ''
+      return
+    }
+    
+    // 获取canvas
+    const canvas = viewport.getCanvas()
+    if (!canvas) {
+      console.error('❌ viewport没有canvas')
+      alert('无法获取画布')
+      previewImageUrl.value = ''
+      return
+    }
+    
+    console.log('✅ 找到canvas:', canvas.width, 'x', canvas.height)
+    
+    // 转换为图像
+    const dataUrl = canvas.toDataURL('image/png')
+    if (dataUrl && dataUrl.length > 100) {
+      previewImageUrl.value = dataUrl
+      console.log('✅ 图像捕获成功，大小:', Math.round(dataUrl.length / 1024), 'KB')
+    } else {
+      console.error('❌ 图像数据无效')
+      alert('图像捕获失败')
+      previewImageUrl.value = ''
+    }
+  } catch (error) {
+    console.error('❌ 捕获图像失败:', error)
+    alert('捕获失败: ' + error.message)
+    previewImageUrl.value = ''
+  }
+}
+
+/**
+ * 捕获STL视图图像（使用VTK的captureImage方法）
+ */
+async function captureSTLImageFromVTK() {
+  console.log('捕获STL图像')
+  
+  try {
+    const dataUrl = await captureSTLImage()
+    if (dataUrl && dataUrl.length > 100) {
+      previewImageUrl.value = dataUrl
+      console.log('✅ STL图像捕获成功')
+    } else {
+      console.error('❌ STL图像数据无效')
+      alert('STL图像捕获失败')
+      previewImageUrl.value = ''
+    }
+  } catch (error) {
+    console.error('❌ 捕获STL图像失败:', error)
+    alert('3D视图捕获失败: ' + error.message)
+    previewImageUrl.value = ''
+  }
+}
+
+/**
+ * 确认保存图像
+ */
+function confirmSaveImage() {
+  console.log('开始保存图像...')
+  console.log('标题:', imageTitle.value)
+  console.log('视图类型:', currentSaveView.value)
+  console.log('图像数据长度:', previewImageUrl.value?.length || 0)
+  
+  if (!imageTitle.value.trim()) {
+    alert('请输入图像标题')
+    return
+  }
+  
+  if (!previewImageUrl.value) {
+    console.error('保存失败：预览图像为空')
+    alert('图像捕获失败，请重新打开保存对话框重试')
+    return
+  }
+  
+  // 再次验证图像数据
+  if (previewImageUrl.value.length < 100) {
+    console.error('保存失败：图像数据过小')
+    alert('图像数据无效，请重新捕获')
+    return
+  }
+  
+  try {
+    // 保存图像
+    const savedImageObj = saveImage({
+      dataUrl: previewImageUrl.value,
+      viewType: currentSaveView.value,
+      title: imageTitle.value,
+      description: imageDescription.value,
+      phase: props.currentPhase
+    })
+    
+    console.log('✅ MainViewer: 图像已保存到集合')
+    console.log('✅ 保存的图像对象:', {
+      id: savedImageObj.id,
+      title: savedImageObj.title,
+      viewType: savedImageObj.viewType,
+      hasData: !!savedImageObj.dataUrl
+    })
+    alert('图像保存成功！')
+    closeSaveImageDialog()
+  } catch (error) {
+    console.error('❌ 保存图像失败:', error)
+    alert('保存失败: ' + error.message)
+  }
 }
 
 // 添加窗口大小调整监听器
@@ -385,9 +654,17 @@ watch(() => props.currentPhase, async (newPhase, oldPhase) => {
   position: absolute;
   top: 8px;
   left: 8px;
+  right: 8px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   z-index: 10;
+}
+
+.viewport-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .viewport-indicator {
@@ -444,5 +721,213 @@ watch(() => props.currentPhase, async (newPhase, oldPhase) => {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* 保存图像按钮样式 */
+.save-image-btn {
+  background: rgba(79, 195, 247, 0.2);
+  border: 1px solid rgba(79, 195, 247, 0.5);
+  color: #4fc3f7;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.save-image-btn:hover {
+  background: rgba(79, 195, 247, 0.4);
+  border-color: #4fc3f7;
+}
+
+.save-image-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 对话框样式 */
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+}
+
+.dialog-content {
+  background: #1a2332;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 600px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s ease;
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid rgba(79, 195, 247, 0.2);
+}
+
+.dialog-header h3 {
+  color: #4fc3f7;
+  margin: 0;
+  font-size: 18px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 28px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  transition: color 0.3s ease;
+}
+
+.close-btn:hover {
+  color: #4fc3f7;
+}
+
+.dialog-body {
+  padding: 20px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  color: #b0bec5;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 195, 247, 0.3);
+  color: #fff;
+  padding: 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+}
+
+.char-count {
+  text-align: right;
+  color: #b0bec5;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: #4fc3f7;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.form-textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.image-preview {
+  margin-top: 20px;
+  border: 1px solid rgba(79, 195, 247, 0.3);
+  border-radius: 4px;
+  overflow: hidden;
+  background: #0d1b2a;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-preview img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.preview-placeholder {
+  color: #b0bec5;
+  text-align: center;
+  padding: 40px;
+}
+
+.preview-placeholder p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.dialog-footer {
+  padding: 20px;
+  border-top: 1px solid rgba(79, 195, 247, 0.2);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.btn-cancel {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.btn-primary {
+  background: #4fc3f7;
+  color: #0d1b2a;
+  font-weight: 500;
+}
+
+.btn-primary:hover {
+  background: #29b6f6;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

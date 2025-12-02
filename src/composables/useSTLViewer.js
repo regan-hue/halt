@@ -404,13 +404,27 @@ export function useSTLViewer() {
       }
 
       // 创建全屏渲染窗口
+      // 尝试启用 preserveDrawingBuffer 以支持 canvas.toDataURL
       const fullScreenRenderer = vtkFullScreenRenderWindow.newInstance({
         rootContainer: containerElement,
         background: [0.1, 0.1, 0.15], // 深色背景
+        containerStyle: { height: '100%', width: '100%', position: 'absolute' },
+        config: {
+          preserveDrawingBuffer: true
+        }
       });
 
       const renderer = fullScreenRenderer.getRenderer();
       const renderWindow = fullScreenRenderer.getRenderWindow();
+      
+      // 尝试在 OpenGLRenderWindow 上设置 preserveDrawingBuffer
+      const views = renderWindow.getViews();
+      if (views.length > 0) {
+        const glWindow = views[0];
+        if (glWindow.setPreserveDrawingBuffer) {
+           glWindow.setPreserveDrawingBuffer(true);
+        }
+      }
 
       // 保存上下文
       context.value = {
@@ -468,6 +482,78 @@ export function useSTLViewer() {
     }
   }
 
+  /**
+   * 捕获当前STL视图为图像
+   * @returns {Promise<string>} Base64编码的图像数据URL
+   */
+  async function captureImage() {
+    if (!context.value) {
+      throw new Error('STL 查看器未初始化');
+    }
+
+    try {
+      const renderWindow = context.value.renderWindow;
+      const view = renderWindow.getViews()[0];
+      
+      console.log('📸 开始捕获STL图像...');
+
+      // 方法1: 使用 view.captureNextImage (推荐方法)
+      // 需要先调用 captureNextImage 获取 promise，然后调用 render 触发截图
+      if (view && typeof view.captureNextImage === 'function') {
+        console.log('尝试 view.captureNextImage()');
+        try {
+          const capturePromise = view.captureNextImage('image/png');
+          renderWindow.render(); // 关键：触发渲染以执行捕获
+          
+          // 添加超时处理，防止 Promise 永远不 resolve
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1000));
+          const captured = await Promise.race([capturePromise, timeoutPromise]);
+          
+          if (captured && typeof captured === 'string' && captured.length > 100) {
+             console.log('✅ captureNextImage 成功, 大小:', Math.round(captured.length / 1024), 'KB');
+             return captured;
+          }
+          console.warn('captureNextImage 返回无效数据');
+        } catch (e) {
+          console.warn('captureNextImage 失败或超时:', e);
+        }
+      }
+
+      // 方法2: 使用 renderWindow.captureImages
+      if (typeof renderWindow.captureImages === 'function') {
+         console.log('尝试 renderWindow.captureImages()');
+         const images = await renderWindow.captureImages();
+         if (images && images.length > 0 && images[0] && images[0].length > 100) {
+            console.log('✅ captureImages 成功');
+            return images[0];
+         }
+      }
+
+      // 方法3: Canvas toDataURL (回退方法)
+      // 注意：如果没有 preserveDrawingBuffer: true，这可能返回黑屏
+      // 我们尝试在渲染后立即捕获
+      if (view && view.getCanvas) {
+         console.log('尝试 canvas.toDataURL()');
+         renderWindow.render();
+         // 稍微等待渲染完成，但不要太久以免buffer被清除
+         await new Promise(r => setTimeout(r, 20));
+         const canvas = view.getCanvas();
+         if (canvas) {
+            const dataUrl = canvas.toDataURL('image/png');
+            if (dataUrl && dataUrl.length > 100) {
+              console.log('✅ canvas.toDataURL 成功, 大小:', Math.round(dataUrl.length / 1024), 'KB');
+              return dataUrl;
+            }
+         }
+      }
+
+      throw new Error('所有捕获方法都失败或返回空数据');
+    } catch (error) {
+      console.error('❌ 捕获STL图像失败:', error);
+      throw error;
+    }
+  }
+
   // ========== 返回值 ==========
   return {
     loading,
@@ -480,6 +566,7 @@ export function useSTLViewer() {
     showPlane,
     hidePlane,
     updatePlanePosition,
+    captureImage,
     cleanup,
   };
 }

@@ -473,6 +473,37 @@
             </div>
         </div>
         
+        <!-- 图像管理部分 -->
+        <div class="analysis-content mt-10">
+          <h4>📷 保存的图像</h4>
+          <div v-if="savedImages && savedImages.length > 0" class="images-grid">
+            <div v-for="image in savedImages" :key="image.id" class="image-card">
+              <div class="image-thumbnail">
+                <img :src="image.thumbnailUrl" :alt="image.title" />
+              </div>
+              <div class="image-info">
+                <div class="image-title">{{ image.title }}</div>
+                <div class="image-meta">
+                  <span class="image-type">{{ image.viewType }}</span>
+                  <span class="image-phase">{{ image.phase }}</span>
+                </div>
+                <div class="image-description">{{ image.description }}</div>
+              </div>
+              <div class="image-actions">
+                <button class="action-btn edit" @click="showEditImageDialog(image)" title="编辑">
+                  ✏️
+                </button>
+                <button class="action-btn delete" @click="deleteSavedImage(image.id)" title="删除">
+                  🗑️
+                </button>
+              </div>
+            </div>
+          </div>
+          <div v-else class="empty-state">
+            暂无保存的图像，请在各视图窗口点击保存按钮
+          </div>
+        </div>
+        
         <button class="primary-btn mt-20" @click="exportReportPDF">📄 导出PDF报告</button>
         <div class="export-options mt-10">
           <button class="secondary-btn" @click="exportReportJSON">导出为JSON</button>
@@ -480,12 +511,40 @@
         </div>
       </div>
     </div>
+    
+    <!-- 编辑图像对话框 -->
+    <div v-if="showEditDialog" class="dialog-overlay" @click="closeEditDialog">
+      <div class="dialog-content" @click.stop>
+        <div class="dialog-header">
+          <h3>编辑图像信息</h3>
+          <button class="close-btn" @click="closeEditDialog">&times;</button>
+        </div>
+        <div class="dialog-body">
+          <div class="form-group">
+            <label>图像标题：</label>
+            <input v-model="editImageTitle" type="text" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label>图像描述：</label>
+            <textarea v-model="editImageDescription" class="form-textarea" rows="3"></textarea>
+          </div>
+          <div class="image-preview">
+            <img v-if="editImageData" :src="editImageData.dataUrl" alt="预览" />
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button @click="closeEditDialog" class="btn btn-cancel">取消</button>
+          <button @click="confirmEditImage" class="btn btn-primary">保存</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import { useSidebar } from '../composables/useSidebar.js';
+import { useSavedImages } from '../composables/useSavedImages.js';
 import { collectReportData, exportReportPDF as exportPDF, exportReportJSON as exportJSON, exportReportText as exportTXT } from '../utils/reportExporter.js';
 
 const props = defineProps(['initialPhase', 'geometricData', 'savedViewStates', 'loadGeometricDataForBothPhases']);
@@ -544,6 +603,65 @@ const {
   savePfdData
 } = useSidebar(props, emit);
 
+// 图像管理
+const { savedImages, deleteImage, updateImage } = useSavedImages();
+
+// 调试：监听savedImages变化
+watch(savedImages, (newVal) => {
+  console.log('📊 Sidebar检测到savedImages变化，当前数量:', newVal.length);
+  if (newVal.length > 0) {
+    console.log('最新图像:', newVal[newVal.length - 1].title);
+  }
+}, { deep: true });
+
+// 组件挂载时检查
+onMounted(() => {
+  console.log('📋 Sidebar mounted, 当前savedImages数量:', savedImages.value.length);
+});
+
+const showEditDialog = ref(false);
+const editImageData = ref(null);
+const editImageTitle = ref('');
+const editImageDescription = ref('');
+
+// 显示编辑图像对话框
+function showEditImageDialog(image) {
+  editImageData.value = image;
+  editImageTitle.value = image.title;
+  editImageDescription.value = image.description;
+  showEditDialog.value = true;
+}
+
+// 关闭编辑对话框
+function closeEditDialog() {
+  showEditDialog.value = false;
+  editImageData.value = null;
+  editImageTitle.value = '';
+  editImageDescription.value = '';
+}
+
+// 确认编辑图像
+function confirmEditImage() {
+  if (!editImageTitle.value.trim()) {
+    alert('请输入图像标题');
+    return;
+  }
+  
+  updateImage(editImageData.value.id, {
+    title: editImageTitle.value,
+    description: editImageDescription.value
+  });
+  
+  closeEditDialog();
+}
+
+// 删除保存的图像
+function deleteSavedImage(imageId) {
+  if (confirm('确定要删除这张图像吗？')) {
+    deleteImage(imageId);
+  }
+}
+
 // 测量工具状态
 const measureToolActive = ref(false);
 
@@ -592,7 +710,7 @@ async function exportReportPDF() {
     bothPhasesGeoData = await props.loadGeometricDataForBothPhases();
   }
   
-  // 导出为PDF，只使用已保存的数据
+  // 导出为PDF，包含保存的图像数据
   const reportData = collectReportData({
     currentPhase,
     haltResult: savedHaltResult,
@@ -604,7 +722,7 @@ async function exportReportPDF() {
     alignmentAngles,
     implantDepth,
     morphologyChange
-  }, bothPhasesGeoData || props.geometricData);
+  }, bothPhasesGeoData || props.geometricData, savedImages.value);
   await exportPDF(reportData);
 }
 
@@ -1325,5 +1443,87 @@ input[type="range"] {
 ::-webkit-scrollbar-thumb {
   background: #1c3a5e; 
   border-radius: 3px;
+}
+
+/* 图像网格样式 */
+.images-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.image-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.image-card:hover {
+  border-color: rgba(79, 195, 247, 0.5);
+  box-shadow: 0 2px 8px rgba(79, 195, 247, 0.2);
+}
+
+.image-thumbnail {
+  width: 100%;
+  height: 150px;
+  overflow: hidden;
+  background: #0d1b2a;
+}
+
+.image-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.image-info {
+  padding: 12px;
+}
+
+.image-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  margin-bottom: 6px;
+}
+
+.image-meta {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.image-type,
+.image-phase {
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: rgba(79, 195, 247, 0.2);
+  color: #4fc3f7;
+}
+
+.image-description {
+  font-size: 11px;
+  color: #b0bec5;
+  line-height: 1.4;
+  margin-top: 6px;
+}
+
+.image-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(79, 195, 247, 0.1);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 30px 20px;
+  color: #607d8b;
+  font-size: 13px;
 }
 </style>
