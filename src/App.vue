@@ -12,6 +12,8 @@
         @plane-level-change="handlePlaneLevelChange"
         @start-measure="handleStartMeasure"
         @stop-measure="handleStopMeasure"
+        @start-angle-measure="handleStartAngleMeasure"
+        @stop-angle-measure="handleStopAngleMeasure"
         @undo-measurement="handleUndoMeasurement"
         @save-view-state="handleSaveViewState"
         @restore-view-state="handleRestoreViewState"
@@ -63,6 +65,8 @@ const {
   handlePlaneLevelChange,
   handleStartMeasure,
   handleStopMeasure,
+  handleStartAngleMeasure,
+  handleStopAngleMeasure,
   handleUndoMeasurement,
   handleToggleVirtualValve,
   handleUpdateValveOpacity,

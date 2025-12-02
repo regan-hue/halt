@@ -116,6 +116,32 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
   }
 
   /**
+   * 开始角度测量功能
+   * 启用角度测量工具
+   */
+  function handleStartAngleMeasure() {
+    console.log('Start angle measure');
+    if (mainViewerRef.value && mainViewerRef.value.enableAngleTool) {
+      mainViewerRef.value.enableAngleTool();
+    } else {
+      console.warn('MainViewer 引用未找到或 enableAngleTool 方法不可用');
+    }
+  }
+
+  /**
+   * 停止角度测量功能
+   * 禁用角度测量工具，恢复 Crosshairs
+   */
+  function handleStopAngleMeasure() {
+    console.log('Stop angle measure');
+    if (mainViewerRef.value && mainViewerRef.value.disableAngleTool) {
+      mainViewerRef.value.disableAngleTool();
+    } else {
+      console.warn('MainViewer 引用未找到或 disableAngleTool 方法不可用');
+    }
+  }
+
+  /**
    * 撤销最后一个测量
    */
   function handleUndoMeasurement() {
@@ -286,6 +312,8 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
     handlePlaneLevelChange,
     handleStartMeasure,
     handleStopMeasure,
+    handleStartAngleMeasure,
+    handleStopAngleMeasure,
     handleUndoMeasurement,
     handleToggleVirtualValve,
     handleUpdateValveOpacity,

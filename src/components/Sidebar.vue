@@ -57,7 +57,15 @@
           @click="toggleMeasureTool" 
           :title="measureToolActive ? '关闭长度测量工具' : '启用长度测量工具'"
         >
-          📏 测量
+          📏 长度
+        </button>
+        <button 
+          class="tool-btn" 
+          :class="{ active: angleToolActive }" 
+          @click="toggleAngleTool" 
+          :title="angleToolActive ? '关闭角度测量工具' : '启用角度测量工具'"
+        >
+          📐 角度
         </button>
         <button class="tool-btn" @click="$emit('undo-measurement')" title="撤销最后一次测量">
           ↩️ 撤销
@@ -664,13 +672,35 @@ function deleteSavedImage(imageId) {
 
 // 测量工具状态
 const measureToolActive = ref(false);
+const angleToolActive = ref(false);
 
 function toggleMeasureTool() {
+  // 如果角度工具激活，先关闭它
+  if (angleToolActive.value) {
+    angleToolActive.value = false;
+    emit('stop-angle-measure');
+  }
+  
   measureToolActive.value = !measureToolActive.value;
   if (measureToolActive.value) {
     emit('start-measure');
   } else {
     emit('stop-measure');
+  }
+}
+
+function toggleAngleTool() {
+  // 如果长度工具激活，先关闭它
+  if (measureToolActive.value) {
+    measureToolActive.value = false;
+    emit('stop-measure');
+  }
+  
+  angleToolActive.value = !angleToolActive.value;
+  if (angleToolActive.value) {
+    emit('start-angle-measure');
+  } else {
+    emit('stop-angle-measure');
   }
 }
 

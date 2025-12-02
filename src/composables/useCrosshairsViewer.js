@@ -17,6 +17,8 @@ import {
   ToolGroupManager, 
   CrosshairsTool,
   LengthTool,
+  AngleTool,
+  OrientationMarkerTool,
   annotation,
   Enums as ToolsEnums 
 } from '@cornerstonejs/tools'
@@ -644,6 +646,18 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
         // 默认将 LengthTool 设置为被动状态（不激活）
         toolGroup.setToolPassive(LengthTool.toolName)
 
+        // 添加角度测量工具
+        addTool(AngleTool)
+        toolGroup.addTool(AngleTool.toolName)
+        // 默认将 AngleTool 设置为被动状态（不激活）
+        toolGroup.setToolPassive(AngleTool.toolName)
+
+        // 添加方向标记工具（显示解剖方向）
+        addTool(OrientationMarkerTool)
+        toolGroup.addTool(OrientationMarkerTool.toolName)
+        // 启用方向标记工具，但不需要交互
+        toolGroup.setToolEnabled(OrientationMarkerTool.toolName)
+
         // 添加其他必要的工具
         const { PanTool, WindowLevelTool, ZoomTool, StackScrollMouseWheelTool } = await import('@cornerstonejs/tools')
         addTool(PanTool)
@@ -677,6 +691,9 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
             toolGroup.getToolInstance(PanTool.toolName),
             toolGroup.getToolInstance(ZoomTool.toolName),
             toolGroup.getToolInstance(WindowLevelTool.toolName),
+            toolGroup.getToolInstance(LengthTool.toolName),
+            toolGroup.getToolInstance(AngleTool.toolName),
+            toolGroup.getToolInstance(OrientationMarkerTool.toolName),
           ].filter(Boolean);
           
           // 注意：Cornerstone工具通常自带优化，这里主要确保配置正确
@@ -1410,7 +1427,61 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
   }
 
   /**
-   * 撤销最后一个长度测量标注
+   * 启用角度测量工具
+   */
+  function enableAngleTool() {
+    try {
+      const toolGroup = ToolGroupManager.getToolGroup(TOOL_GROUP_ID);
+      if (!toolGroup) {
+        console.warn('工具组未找到，无法启用角度测量工具');
+        return;
+      }
+
+      // 禁用 Crosshairs 工具（设置为被动），使其不能移动
+      toolGroup.setToolPassive(CrosshairsTool.toolName);
+      
+      // 激活角度测量工具
+      toolGroup.setToolActive(AngleTool.toolName, {
+        bindings: [
+          {
+            mouseButton: ToolsEnums.MouseBindings.Primary, // 左键点击
+          },
+        ],
+      });
+      
+      console.log('角度测量工具已启用，十字架已禁用移动');
+    } catch (err) {
+      console.error('启用角度测量工具失败:', err);
+    }
+  }
+
+  /**
+   * 禁用角度测量工具，恢复 Crosshairs 工具
+   */
+  function disableAngleTool() {
+    try {
+      const toolGroup = ToolGroupManager.getToolGroup(TOOL_GROUP_ID);
+      if (!toolGroup) {
+        console.warn('工具组未找到，无法禁用角度测量工具');
+        return;
+      }
+
+      // 将角度测量工具设置为被动
+      toolGroup.setToolPassive(AngleTool.toolName);
+      
+      // 重新激活 Crosshairs 工具，使其可以移动
+      toolGroup.setToolActive(CrosshairsTool.toolName, {
+        bindings: [{ mouseButton: ToolsEnums.MouseBindings.Primary }],
+      });
+      
+      console.log('角度测量工具已禁用，十字架已恢复可移动状态');
+    } catch (err) {
+      console.error('禁用角度测量工具失败:', err);
+    }
+  }
+
+  /**
+   * 撤销最后一个测量标注（长度或角度）
    */
   function undoLastMeasurement() {
     try {
@@ -1422,18 +1493,18 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
       // 获取所有标注
       const allAnnotations = annotation.state.getAllAnnotations();
       
-      // 过滤出长度测量标注
-      const lengthAnnotations = allAnnotations.filter(
-        ann => ann.metadata?.toolName === LengthTool.toolName
+      // 过滤出长度和角度测量标注
+      const measurementAnnotations = allAnnotations.filter(
+        ann => ann.metadata?.toolName === LengthTool.toolName || ann.metadata?.toolName === AngleTool.toolName
       );
 
-      if (lengthAnnotations.length === 0) {
+      if (measurementAnnotations.length === 0) {
         console.log('没有可撤销的测量');
         return;
       }
 
       // 获取最后一个标注
-      const lastAnnotation = lengthAnnotations[lengthAnnotations.length - 1];
+      const lastAnnotation = measurementAnnotations[measurementAnnotations.length - 1];
       
       // 删除标注
       annotation.state.removeAnnotation(lastAnnotation.annotationUID);
@@ -1709,6 +1780,8 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
     restoreMPR,
     enableLengthTool,
     disableLengthTool,
+    enableAngleTool,
+    disableAngleTool,
     undoLastMeasurement,
     enableCrosshairs,
     disableCrosshairs,
