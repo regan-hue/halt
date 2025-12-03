@@ -8,6 +8,7 @@ import {
   Enums,
   volumeLoader,
   cache,
+  eventTarget,
 } from '@cornerstonejs/core'
 import cornerstoneDICOMImageLoader from '@cornerstonejs/dicom-image-loader'
 import dicomParser from 'dicom-parser'
@@ -123,6 +124,7 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
   let currentVolumeId = null;
   let initialCameraPositions = null; // 保存初始MPR位置
   const savedViewStates = ref([]); // 保存的视图状态列表
+  const measurementHistory = ref([]); // 测量历史记录
   const volumeCache = {}; // 缓存已加载的体积数据 {seriesUID: {volumeId, imageIds}}
   let savedPlaneState = null; // 保存的平面定位状态（用于期相切换时保持平面）
   let lastCameraState = null; // 保存最后的相机状态（用于切换期相时保持MPR视图）
@@ -562,6 +564,29 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
   }
 
   /**
+   * 处理标注添加事件
+   */
+  function onAnnotationAdded(evt) {
+    const { annotation } = evt.detail;
+    if (annotation.metadata.toolName === LengthTool.toolName || annotation.metadata.toolName === AngleTool.toolName) {
+      measurementHistory.value.push(annotation.annotationUID);
+      console.log('已添加测量记录:', annotation.annotationUID);
+    }
+  }
+
+  /**
+   * 处理标注移除事件
+   */
+  function onAnnotationRemoved(evt) {
+    const { annotation } = evt.detail;
+    const index = measurementHistory.value.indexOf(annotation.annotationUID);
+    if (index > -1) {
+      measurementHistory.value.splice(index, 1);
+      console.log('已移除测量记录:', annotation.annotationUID);
+    }
+  }
+
+  /**
    * 初始化 Cornerstone 和加载体积数据
    */
   async function initialize(axialElement, sagittalElement, coronalElement) {
@@ -569,6 +594,10 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
       // 初始化 Cornerstone
       await cornerstoneInit()
       await cornerstoneToolsInit()
+      
+      // 添加事件监听
+      eventTarget.addEventListener(ToolsEnums.Events.ANNOTATION_ADDED, onAnnotationAdded);
+      eventTarget.addEventListener(ToolsEnums.Events.ANNOTATION_REMOVED, onAnnotationRemoved);
       
       // 配置 DICOM 图像加载器
       // 设置 cornerstone 实例 - 这是必需的！
@@ -889,6 +918,11 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
    */
   function cleanup() {
     try {
+      // 移除事件监听
+      eventTarget.removeEventListener(ToolsEnums.Events.ANNOTATION_ADDED, onAnnotationAdded);
+      eventTarget.removeEventListener(ToolsEnums.Events.ANNOTATION_REMOVED, onAnnotationRemoved);
+      measurementHistory.value = [];
+
       const viewportIds = {
         axial: 'axial-viewport',
         sagittal: 'sagittal-viewport',
@@ -1490,24 +1524,16 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
         return;
       }
 
-      // 获取所有标注
-      const allAnnotations = annotation.state.getAllAnnotations();
-      
-      // 过滤出长度和角度测量标注
-      const measurementAnnotations = allAnnotations.filter(
-        ann => ann.metadata?.toolName === LengthTool.toolName || ann.metadata?.toolName === AngleTool.toolName
-      );
-
-      if (measurementAnnotations.length === 0) {
+      if (measurementHistory.value.length === 0) {
         console.log('没有可撤销的测量');
         return;
       }
 
-      // 获取最后一个标注
-      const lastAnnotation = measurementAnnotations[measurementAnnotations.length - 1];
+      // 获取最后一个标注UID
+      const lastAnnotationUID = measurementHistory.value[measurementHistory.value.length - 1];
       
-      // 删除标注
-      annotation.state.removeAnnotation(lastAnnotation.annotationUID);
+      // 删除标注 (这将触发 onAnnotationRemoved，从而从 history 中移除)
+      annotation.state.removeAnnotation(lastAnnotationUID);
       
       // 重新渲染视图
       optimizedRender([
@@ -1516,7 +1542,7 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
         viewportIds.coronal
       ]);
       
-      console.log('已撤销最后一个测量');
+      console.log('已撤销最后一个测量:', lastAnnotationUID);
     } catch (err) {
       console.error('撤销测量失败:', err);
     }
