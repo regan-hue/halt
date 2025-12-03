@@ -161,6 +161,7 @@ const props = defineProps({
   seriesInstanceUID: { type: String, required: true },
   currentPhase: { type: String, default: '收缩期' },
   allSeriesUIDs: { type: Object, default: () => ({}) }, // 所有期相的UID映射
+  geometricData: { type: Object, default: null },
 })
 
 // 图像保存相关
@@ -194,7 +195,10 @@ const {
   deleteViewState,
   renameViewState,
   clearAllViewStates,
-  getAxialSlicePosition
+  getAxialSlicePosition,
+  toggleWaveImage,
+  updateWaveOpacity,
+  updateWaveRotation
 } = useCrosshairsViewer(props, props.allSeriesUIDs)
 const { 
   loading: stlLoading, 
@@ -571,7 +575,10 @@ defineExpose({
   restoreViewState,
   deleteViewState,
   renameViewState,
-  clearAllViewStates
+  clearAllViewStates,
+  toggleWaveImage,
+  updateWaveOpacity,
+  updateWaveRotation
 })
 
 // 监听 seriesInstanceUID 变化，切换体积

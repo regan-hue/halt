@@ -128,6 +128,13 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
   const volumeCache = {}; // 缓存已加载的体积数据 {seriesUID: {volumeId, imageIds}}
   let savedPlaneState = null; // 保存的平面定位状态（用于期相切换时保持平面）
   let lastCameraState = null; // 保存最后的相机状态（用于切换期相时保持MPR视图）
+  
+  // Wave Image 相关
+  let axialContainer = null;
+  let waveImageElement = null;
+  let isWaveImageVisible = false;
+  let waveOpacity = 1.0;
+  let waveRotation = 0;
 
   // ========== 性能优化 ==========
   /**
@@ -587,10 +594,109 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
   }
 
   /**
+   * 更新 Wave Image 位置和大小
+   */
+  function updateWaveImagePosition() {
+    if (!isWaveImageVisible || !waveImageElement || !renderingEngine || !viewportIds) return;
+
+    const viewport = renderingEngine.getViewport(viewportIds.axial);
+    if (!viewport) return;
+
+    const camera = viewport.getCamera();
+    const focalPoint = camera.focalPoint;
+    const canvasPos = viewport.worldToCanvas(focalPoint);
+
+    waveImageElement.style.left = `${canvasPos[0]}px`;
+    waveImageElement.style.top = `${canvasPos[1]}px`;
+
+    // 计算并设置图片大小
+    // 图片实际物理尺寸为 26mm
+    const physicalSize = 26; // mm
+      
+    // 计算像素比例
+    // parallelScale 是视口高度的一半（世界单位）
+    const parallelScale = camera.parallelScale;
+    const canvasHeight = viewport.element.clientHeight;
+      
+    if (parallelScale && canvasHeight) {
+      // 1 mm 对应的像素数
+      const pixelsPerMm = canvasHeight / (2 * parallelScale);
+      const sizeInPixels = physicalSize * pixelsPerMm;
+      
+      waveImageElement.style.width = `${sizeInPixels}px`;
+      waveImageElement.style.height = `${sizeInPixels}px`;
+      waveImageElement.style.objectFit = 'contain';
+    }
+  }
+
+  /**
+   * 更新 Wave Image 透明度 (使用 rAF 节流优化)
+   */
+  const updateWaveOpacity = rafThrottle((opacity) => {
+    waveOpacity = opacity;
+    if (waveImageElement) {
+      waveImageElement.style.opacity = waveOpacity;
+    }
+  });
+
+  /**
+   * 更新 Wave Image 旋转角度 (使用 rAF 节流优化)
+   */
+  const updateWaveRotation = rafThrottle((rotation) => {
+    waveRotation = rotation;
+    if (waveImageElement) {
+      // 保持居中并旋转
+      waveImageElement.style.transform = `translate(-50%, -50%) rotate(${waveRotation}deg)`;
+    }
+  });
+
+  /**
+   * 切换 Wave Image 显示
+   */
+  function toggleWaveImage() {
+    if (!axialContainer) {
+      console.warn('Axial container not initialized');
+      return;
+    }
+
+    isWaveImageVisible = !isWaveImageVisible;
+
+    if (isWaveImageVisible) {
+      if (!waveImageElement) {
+        waveImageElement = document.createElement('img');
+        waveImageElement.src = '/wave.png';
+        waveImageElement.style.position = 'absolute';
+        waveImageElement.style.pointerEvents = 'none';
+        waveImageElement.style.transform = `translate(-50%, -50%) rotate(${waveRotation}deg)`;
+        waveImageElement.style.zIndex = '100';
+        waveImageElement.style.opacity = waveOpacity;
+        // 设置旋转中心为图片中心
+        waveImageElement.style.transformOrigin = 'center center';
+      }
+      axialContainer.appendChild(waveImageElement);
+      
+      // 初始位置更新
+      updateWaveImagePosition();
+
+      // 添加事件监听
+      axialContainer.addEventListener(Enums.Events.CAMERA_MODIFIED, updateWaveImagePosition);
+    } else {
+      if (waveImageElement && waveImageElement.parentNode) {
+        waveImageElement.parentNode.removeChild(waveImageElement);
+      }
+      // 移除事件监听
+      axialContainer.removeEventListener(Enums.Events.CAMERA_MODIFIED, updateWaveImagePosition);
+    }
+  }
+
+  /**
    * 初始化 Cornerstone 和加载体积数据
    */
   async function initialize(axialElement, sagittalElement, coronalElement) {
     try {
+      // 保存 axialElement 引用
+      axialContainer = axialElement;
+
       // 初始化 Cornerstone
       await cornerstoneInit()
       await cornerstoneToolsInit()
@@ -1820,6 +1926,9 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
     renameViewState,
     clearAllViewStates,
     getAxialSlicePosition,
+    toggleWaveImage,
+    updateWaveOpacity,
+    updateWaveRotation
   }
 }
 

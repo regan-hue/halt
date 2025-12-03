@@ -158,20 +158,29 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
    */
   function handleToggleVirtualValve() {
     console.log('Toggle virtual valve');
+    if (mainViewerRef.value && mainViewerRef.value.toggleWaveImage) {
+      mainViewerRef.value.toggleWaveImage();
+    } else {
+      console.warn('MainViewer 引用未找到或 toggleWaveImage 方法不可用');
+    }
   }
 
   /**
    * 更新瓣膜透明度
    */
   function handleUpdateValveOpacity(val) {
-    console.log('Update valve opacity:', val);
+    if (mainViewerRef.value && mainViewerRef.value.updateWaveOpacity) {
+      mainViewerRef.value.updateWaveOpacity(val);
+    }
   }
 
   /**
    * 更新瓣膜旋转角度
    */
   function handleUpdateValveRotation(val) {
-    console.log('Update valve rotation:', val);
+    if (mainViewerRef.value && mainViewerRef.value.updateWaveRotation) {
+      mainViewerRef.value.updateWaveRotation(val);
+    }
   }
 
   /**

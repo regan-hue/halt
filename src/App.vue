@@ -32,6 +32,7 @@
         :series-instance-u-i-d="seriesInstanceUID"
         :current-phase="currentPhase"
         :all-series-u-i-ds="config.seriesInstanceUIDs"
+        :geometric-data="currentGeoData"
       />
     </div>
   </div>
