@@ -18,11 +18,11 @@ import {
   CrosshairsTool,
   LengthTool,
   AngleTool,
-  OrientationMarkerTool,
   annotation,
   Enums as ToolsEnums 
 } from '@cornerstonejs/tools'
 import { cornerstoneStreamingImageVolumeLoader } from '@cornerstonejs/streaming-image-volume-loader'
+import CustomOrientationMarkerTool from '../tools/CustomOrientationMarkerTool.js'
 
 // ========== 向量运算辅助函数 ==========
 function crossProductVec(a, b) {
@@ -652,11 +652,11 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
         // 默认将 AngleTool 设置为被动状态（不激活）
         toolGroup.setToolPassive(AngleTool.toolName)
 
-        // 添加方向标记工具（显示解剖方向）
-        addTool(OrientationMarkerTool)
-        toolGroup.addTool(OrientationMarkerTool.toolName)
+        // 添加自定义方向标记工具（使用Human.stl模型显示解剖方向）
+        addTool(CustomOrientationMarkerTool)
+        toolGroup.addTool(CustomOrientationMarkerTool.toolName)
         // 启用方向标记工具，但不需要交互
-        toolGroup.setToolEnabled(OrientationMarkerTool.toolName)
+        toolGroup.setToolEnabled(CustomOrientationMarkerTool.toolName)
 
         // 添加其他必要的工具
         const { PanTool, WindowLevelTool, ZoomTool, StackScrollMouseWheelTool } = await import('@cornerstonejs/tools')
@@ -693,7 +693,7 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
             toolGroup.getToolInstance(WindowLevelTool.toolName),
             toolGroup.getToolInstance(LengthTool.toolName),
             toolGroup.getToolInstance(AngleTool.toolName),
-            toolGroup.getToolInstance(OrientationMarkerTool.toolName),
+            toolGroup.getToolInstance(CustomOrientationMarkerTool.toolName),
           ].filter(Boolean);
           
           // 注意：Cornerstone工具通常自带优化，这里主要确保配置正确

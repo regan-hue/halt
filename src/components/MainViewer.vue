@@ -1,34 +1,54 @@
 <template>
   <div class="main-viewer">
-    <div class="viewport-grid">
-      <div class="viewport-container">
+    <div class="viewport-grid" :class="{ 'has-maximized': maximizedViewport }">
+      <div class="viewport-container" :class="{ maximized: maximizedViewport === 'AXIAL' }">
         <div class="viewport-header">
           <div class="viewport-header-left">
             <div class="viewport-label">AXIAL</div>
             <div class="viewport-indicator" :style="{ backgroundColor: getLabelColor('AXIAL') }"></div>
           </div>
-          <button class="save-image-btn" @click="openSaveImageDialog('AXIAL', viewport1)" title="保存图像">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-              <polyline points="17 21 17 13 7 13 7 21"></polyline>
-              <polyline points="7 3 7 8 15 8"></polyline>
-            </svg>
-          </button>
+          <div class="viewport-header-right">
+            <button class="action-btn" @click="toggleMaximize('AXIAL')" :title="maximizedViewport === 'AXIAL' ? '还原' : '最大化'">
+              <svg v-if="maximizedViewport === 'AXIAL'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+              </svg>
+              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path>
+              </svg>
+            </button>
+            <button class="action-btn" @click="openSaveImageDialog('AXIAL', viewport1)" title="保存图像">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="viewport-element" ref="viewport1"></div>
       </div>
-      <div class="viewport-container stl-viewport">
+      <div class="viewport-container stl-viewport" :class="{ maximized: maximizedViewport === 'STL' }">
         <div class="viewport-header">
           <div class="viewport-header-left">
             <div class="viewport-label">3D MODEL</div>
           </div>
-          <button class="save-image-btn" @click="openSaveImageDialog('STL', stlViewport)" title="保存图像">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-              <polyline points="17 21 17 13 7 13 7 21"></polyline>
-              <polyline points="7 3 7 8 15 8"></polyline>
-            </svg>
-          </button>
+          <div class="viewport-header-right">
+            <button class="action-btn" @click="toggleMaximize('STL')" :title="maximizedViewport === 'STL' ? '还原' : '最大化'">
+              <svg v-if="maximizedViewport === 'STL'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+              </svg>
+              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path>
+              </svg>
+            </button>
+            <button class="action-btn" @click="openSaveImageDialog('STL', stlViewport)" title="保存图像">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="viewport-element" ref="stlViewport"></div>
         <div v-if="stlLoading" class="stl-loading">
@@ -37,35 +57,55 @@
         </div>
         <div v-if="stlError" class="stl-error">{{ stlError }}</div>
       </div>
-      <div class="viewport-container">
+      <div class="viewport-container" :class="{ maximized: maximizedViewport === 'CORONAL' }">
         <div class="viewport-header">
           <div class="viewport-header-left">
             <div class="viewport-label">CORONAL</div>
             <div class="viewport-indicator" :style="{ backgroundColor: getLabelColor('CORONAL') }"></div>
           </div>
-          <button class="save-image-btn" @click="openSaveImageDialog('CORONAL', viewport3)" title="保存图像">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-              <polyline points="17 21 17 13 7 13 7 21"></polyline>
-              <polyline points="7 3 7 8 15 8"></polyline>
-            </svg>
-          </button>
+          <div class="viewport-header-right">
+            <button class="action-btn" @click="toggleMaximize('CORONAL')" :title="maximizedViewport === 'CORONAL' ? '还原' : '最大化'">
+              <svg v-if="maximizedViewport === 'CORONAL'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+              </svg>
+              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path>
+              </svg>
+            </button>
+            <button class="action-btn" @click="openSaveImageDialog('CORONAL', viewport3)" title="保存图像">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="viewport-element" ref="viewport3"></div>
       </div>
-      <div class="viewport-container">
+      <div class="viewport-container" :class="{ maximized: maximizedViewport === 'SAGITTAL' }">
         <div class="viewport-header">
           <div class="viewport-header-left">
             <div class="viewport-label">SAGITTAL</div>
             <div class="viewport-indicator" :style="{ backgroundColor: getLabelColor('SAGITTAL') }"></div>
           </div>
-          <button class="save-image-btn" @click="openSaveImageDialog('SAGITTAL', viewport2)" title="保存图像">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-              <polyline points="17 21 17 13 7 13 7 21"></polyline>
-              <polyline points="7 3 7 8 15 8"></polyline>
-            </svg>
-          </button>
+          <div class="viewport-header-right">
+            <button class="action-btn" @click="toggleMaximize('SAGITTAL')" :title="maximizedViewport === 'SAGITTAL' ? '还原' : '最大化'">
+              <svg v-if="maximizedViewport === 'SAGITTAL'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+              </svg>
+              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path>
+              </svg>
+            </button>
+            <button class="action-btn" @click="openSaveImageDialog('SAGITTAL', viewport2)" title="保存图像">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="viewport-element" ref="viewport2"></div>
       </div>
@@ -172,6 +212,23 @@ const viewport1 = ref(null)
 const viewport2 = ref(null)
 const viewport3 = ref(null)
 const stlViewport = ref(null)
+
+// 视口最大化相关
+const maximizedViewport = ref(null)
+
+function toggleMaximize(viewType) {
+  if (maximizedViewport.value === viewType) {
+    maximizedViewport.value = null
+  } else {
+    maximizedViewport.value = viewType
+  }
+  
+  // 触发 resize 以更新视口内容
+  nextTick(() => {
+    // 触发 window resize 事件，让 Cornerstone 和 VTK 重新计算大小
+    window.dispatchEvent(new Event('resize'))
+  })
+}
 
 // 根据viewport类型获取标签颜色，与十字交叉线颜色匹配
 const getLabelColor = (type) => {
@@ -727,8 +784,8 @@ watch(() => props.currentPhase, async (newPhase, oldPhase) => {
   100% { transform: rotate(360deg); }
 }
 
-/* 保存图像按钮样式 */
-.save-image-btn {
+/* 操作按钮样式 */
+.action-btn {
   background: rgba(79, 195, 247, 0.2);
   border: 1px solid rgba(79, 195, 247, 0.5);
   color: #4fc3f7;
@@ -742,14 +799,31 @@ watch(() => props.currentPhase, async (newPhase, oldPhase) => {
   pointer-events: auto;
 }
 
-.save-image-btn:hover {
+.action-btn:hover {
   background: rgba(79, 195, 247, 0.4);
   border-color: #4fc3f7;
 }
 
-.save-image-btn svg {
+.action-btn svg {
   width: 16px;
   height: 16px;
+}
+
+.viewport-header-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 最大化相关样式 */
+.viewport-grid.has-maximized .viewport-container:not(.maximized) {
+  display: none;
+}
+
+.viewport-container.maximized {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  z-index: 100;
 }
 
 /* 对话框样式 */
