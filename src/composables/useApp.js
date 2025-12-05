@@ -283,6 +283,8 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
       targetPlaneKey = 'Stent_Frame_base_up_1.0_plane';
     } else if (analysisType === 'commissure') {
       targetPlaneKey = 'Stent_Frame_Crown_Frame_plane';
+    } else if (analysisType === 'commissure_alignment') {
+      targetPlaneKey = 'Stent_Frame_Base_plane';
     } else {
       console.error('未知的分析类型:', analysisType);
       return;

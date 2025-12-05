@@ -1174,6 +1174,8 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
         targetPlaneKey = 'Stent_Frame_base_up_1.0_plane';
       } else if (analysisType === 'commissure') {
         targetPlaneKey = 'Stent_Frame_base_up_1.5_plane';
+      } else if (analysisType === 'commissure_alignment') {
+        targetPlaneKey = 'Stent_Frame_Base_plane';
       } else {
         console.error('未知的分析类型:', analysisType);
         return;

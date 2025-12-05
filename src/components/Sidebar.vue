@@ -371,6 +371,11 @@
                 <span>°</span>
             </div>
             <p class="hint">填写三个交接点之间的相对角度</p>
+
+            <div class="control-buttons mt-10">
+                <button class="secondary-btn" @click="$emit('locate-plane', 'commissure_alignment')">📍 定位平面</button>
+                <button class="secondary-btn" @click="$emit('restore-mpr')">🔄 恢复MPR</button>
+            </div>
         </div>
       </div>
 
@@ -513,10 +518,6 @@
         </div>
         
         <button class="primary-btn mt-20" @click="exportReportPDF">📄 导出PDF报告</button>
-        <div class="export-options mt-10">
-          <button class="secondary-btn" @click="exportReportJSON">导出为JSON</button>
-          <button class="secondary-btn" @click="exportReportText">导出为文本</button>
-        </div>
       </div>
     </div>
     
@@ -553,7 +554,7 @@
 import { ref, watch, onMounted } from 'vue';
 import { useSidebar } from '../composables/useSidebar.js';
 import { useSavedImages } from '../composables/useSavedImages.js';
-import { collectReportData, exportReportPDF as exportPDF, exportReportJSON as exportJSON, exportReportText as exportTXT } from '../utils/reportExporter.js';
+import { collectReportData, exportReportPDF as exportPDF } from '../utils/reportExporter.js';
 
 const props = defineProps(['initialPhase', 'geometricData', 'savedViewStates', 'loadGeometricDataForBothPhases']);
 const emit = defineEmits([
@@ -754,50 +755,6 @@ async function exportReportPDF() {
     morphologyChange
   }, bothPhasesGeoData || props.geometricData, savedImages.value);
   await exportPDF(reportData);
-}
-
-async function exportReportJSON() {
-  // 加载收缩期和舒张期的几何数据
-  let bothPhasesGeoData = null;
-  if (props.loadGeometricDataForBothPhases) {
-    bothPhasesGeoData = await props.loadGeometricDataForBothPhases();
-  }
-  
-  const reportData = collectReportData({
-    currentPhase,
-    haltResult: savedHaltResult,
-    haltDetails: savedHaltDetails,
-    sfdResult: savedSfdResult,
-    sfdDetails: savedSfdDetails,
-    pfdResult: savedPfdResult,
-    pfdThickness: savedPfdThickness,
-    alignmentAngles,
-    implantDepth,
-    morphologyChange
-  }, bothPhasesGeoData || props.geometricData);
-  exportJSON(reportData);
-}
-
-async function exportReportText() {
-  // 加载收缩期和舒张期的几何数据
-  let bothPhasesGeoData = null;
-  if (props.loadGeometricDataForBothPhases) {
-    bothPhasesGeoData = await props.loadGeometricDataForBothPhases();
-  }
-  
-  const reportData = collectReportData({
-    currentPhase,
-    haltResult: savedHaltResult,
-    haltDetails: savedHaltDetails,
-    sfdResult: savedSfdResult,
-    sfdDetails: savedSfdDetails,
-    pfdResult: savedPfdResult,
-    pfdThickness: savedPfdThickness,
-    alignmentAngles,
-    implantDepth,
-    morphologyChange
-  }, bothPhasesGeoData || props.geometricData);
-  exportTXT(reportData);
 }
 </script>
 
