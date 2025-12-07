@@ -87,6 +87,19 @@ export default defineConfig({
             proxyRes.headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
           })
         },
+      },
+      // 添加 CAD API 代理，用于获取 STL 文件和测量数据
+      '/cad': {
+        target: 'http://192.168.1.3:29999',
+        changeOrigin: true,
+        secure: false,
+        ws: false,
+        configure: (proxy, _options) => {
+          proxy.on('proxyRes', (proxyRes, req, _res) => {
+            proxyRes.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
+            proxyRes.headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
+          })
+        },
       }
     }
   }

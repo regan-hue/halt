@@ -24,6 +24,7 @@ import {
 } from '@cornerstonejs/tools'
 import { cornerstoneStreamingImageVolumeLoader } from '@cornerstonejs/streaming-image-volume-loader'
 import CustomOrientationMarkerTool from '../tools/CustomOrientationMarkerTool.js'
+import { fetchJSONFile } from '../utils/apiClient.js'
 
 // ========== 向量运算辅助函数 ==========
 function crossProductVec(a, b) {
@@ -1153,13 +1154,14 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
 
     try {
       // 读取收缩期与舒张期两个 measurement.json（优先使用与当前期相同的文件）
-      const systolePath = '/data/shousuoqi/measurement.json';
-      const diastolePath = '/data/shuzhangqi/measurement.json';
-      const [respS, respD] = await Promise.all([fetch(systolePath), fetch(diastolePath)]);
-      if (!respS.ok && !respD.ok) {
+      const [dataS, dataD] = await Promise.all([
+        fetchJSONFile('measurement.json', '收缩期').catch(() => null),
+        fetchJSONFile('measurement.json', '舒张期').catch(() => null)
+      ]);
+      
+      if (!dataS && !dataD) {
         throw new Error('无法加载任何 measurement.json');
       }
-      const [dataS, dataD] = [respS.ok ? await respS.json() : null, respD.ok ? await respD.json() : null];
 
       let targetPlaneKey;
       if (analysisType === 'halt') {

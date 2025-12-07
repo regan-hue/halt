@@ -5,6 +5,7 @@ import vtkActor from '@kitware/vtk.js/Rendering/Core/Actor';
 import vtkMapper from '@kitware/vtk.js/Rendering/Core/Mapper';
 import vtkSTLReader from '@kitware/vtk.js/IO/Geometry/STLReader';
 import vtkPlaneSource from '@kitware/vtk.js/Filters/Sources/PlaneSource';
+import { fetchSTLFile } from '../utils/apiClient.js';
 
 // ========== 常量定义 ==========
 /**
@@ -87,19 +88,10 @@ export function useSTLViewer() {
    */
   async function loadSTLFile(file, phase, renderer, renderWindow) {
     try {
-      const dataPath = getDataPath(phase);
-      const filePath = `${dataPath}/${file.name}`;
+      console.log(`开始加载文件: ${file.name} (${phase})`);
       
-      console.log(`开始加载文件: ${filePath}`);
-      
-      // 使用 fetch 加载二进制文件
-      const response = await fetch(filePath);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      // 获取 ArrayBuffer
-      const arrayBuffer = await response.arrayBuffer();
+      // 使用 apiClient 从远程 API 获取 STL 文件
+      const arrayBuffer = await fetchSTLFile(file.name, phase);
       
       // 创建新的读取器、映射器和演员
       const stlReader = vtkSTLReader.newInstance();

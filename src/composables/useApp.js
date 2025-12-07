@@ -6,6 +6,7 @@ import {
   DEFAULT_MODULE,
   DEFAULT_SUB_MODULE
 } from '../config/appConfig.js';
+import { fetchJSONFile } from '../utils/apiClient.js';
 
 /**
  * 应用状态管理 Composable
@@ -188,9 +189,8 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
    */
   async function loadAllGeometricData() {
     try {
-      const phaseFolder = currentPhase.value === '收缩期' ? 'shousuoqi' : 'shuzhangqi';
-      const response = await fetch(`/data/${phaseFolder}/measurement.json`);
-      const data = await response.json();
+      const phase = currentPhase.value;
+      const data = await fetchJSONFile('measurement.json', phase);
       
       // 提取几何数据的辅助函数
       const extractPlaneData = (planeData) => {
@@ -237,8 +237,7 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
       };
 
       // 加载收缩期数据
-      const systolicResponse = await fetch('/data/shousuoqi/measurement.json');
-      const systolicData = await systolicResponse.json();
+      const systolicData = await fetchJSONFile('measurement.json', '收缩期');
       const systolic = {
         inflow: extractPlaneData(systolicData['Stent_Frame_Base_plane']),
         nadir: extractPlaneData(systolicData['Stent_Frame_base_up_1.0_plane']),
@@ -246,8 +245,7 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
       };
 
       // 加载舒张期数据
-      const diastolicResponse = await fetch('/data/shuzhangqi/measurement.json');
-      const diastolicData = await diastolicResponse.json();
+      const diastolicData = await fetchJSONFile('measurement.json', '舒张期');
       const diastolic = {
         inflow: extractPlaneData(diastolicData['Stent_Frame_Base_plane']),
         nadir: extractPlaneData(diastolicData['Stent_Frame_base_up_1.0_plane']),
