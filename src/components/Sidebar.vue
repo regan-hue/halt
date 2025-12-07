@@ -166,8 +166,6 @@
           </div>
 
           <div v-if="haltResult === 'exists'" class="detail-panel">
-            <p class="sub-label">HALT分级 (0 -> <=25% -> 25-50% -> 50-75% -> >75%)</p>
-            
             <div class="grade-row" v-for="leaf in ['LC', 'RC', 'NC']" :key="leaf">
               <span class="leaf-label">{{ leaf }}</span>
               <div class="grade-options">

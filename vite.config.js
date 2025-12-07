@@ -16,6 +16,7 @@ export default defineConfig({
     },
   },
   server: {
+    // host: '0.0.0.0',
     port: 3002,
     open: true,
     // ⭐ 关键：添加响应头以启用 SharedArrayBuffer
