@@ -14,14 +14,14 @@
  * http://192.168.1.3:3002/halt?StudyInstanceUID=1.2.826...&BestSyst=1.3.12...&BestDiast=1.3.12...
  */
 export const DEFAULT_SERIES_INSTANCE_UIDS = {
-  收缩期: '1.3.12.2.1107.5.1.4.73336.30000022051900071431600050933',
-  舒张期: '1.3.12.2.1107.5.1.4.73336.30000022051900071431600051249',
+  收缩期: '1',
+  舒张期: '1',
 };
 
 /**
  * 默认研究实例 UID
  */
-export const DEFAULT_STUDY_INSTANCE_UID = '1.2.826.0.1.3680043.2.109.5.20220519102622656.1699758078.1';
+export const DEFAULT_STUDY_INSTANCE_UID = '1.2.';
 
 /**
  * 默认期相
@@ -37,6 +37,12 @@ export const DEFAULT_MODULE = 'valve';
  * 默认子模块
  */
 export const DEFAULT_SUB_MODULE = 'halt';
+
+/**
+ * 当前应用配置（全局单例）
+ * 在应用启动时初始化，供其他模块使用
+ */
+let currentAppConfig = null;
 
 /**
  * 从 URL 参数获取配置
@@ -59,7 +65,7 @@ export function getAppConfig() {
     });
   }
 
-  return {
+  const config = {
     seriesInstanceUIDs: {
       收缩期: bestSyst || 
               import.meta.env.VITE_SERIES_UID_SYSTOLIC || 
@@ -72,5 +78,18 @@ export function getAppConfig() {
                       import.meta.env.VITE_STUDY_INSTANCE_UID || 
                       DEFAULT_STUDY_INSTANCE_UID,
   };
+
+  // 保存到全局配置
+  currentAppConfig = config;
+  
+  return config;
+}
+
+/**
+ * 获取当前应用配置
+ * @returns {Object|null} 当前配置对象，如果未初始化则返回 null
+ */
+export function getCurrentAppConfig() {
+  return currentAppConfig;
 }
 

@@ -3,7 +3,7 @@
  * 用于从远程服务器获取 STL 文件和 JSON 数据
  */
 
-import { DEFAULT_SERIES_INSTANCE_UIDS } from '../config/appConfig.js';
+import { DEFAULT_SERIES_INSTANCE_UIDS, getCurrentAppConfig } from '../config/appConfig.js';
 
 /**
  * API 基础配置
@@ -38,6 +38,15 @@ const DATA_NAME_MAP = {
  * @returns {string} seriesInstanceUid
  */
 function getSeriesInstanceUid(phase) {
+  // 优先使用从 URL 获取的配置
+  const currentConfig = getCurrentAppConfig();
+  if (currentConfig && currentConfig.seriesInstanceUIDs && currentConfig.seriesInstanceUIDs[phase]) {
+    console.log(`🔗 使用 URL 配置的 ${phase} UID:`, currentConfig.seriesInstanceUIDs[phase]);
+    return currentConfig.seriesInstanceUIDs[phase];
+  }
+  
+  // 降级到默认值
+  console.log(`⚠️ 使用默认 ${phase} UID:`, DEFAULT_SERIES_INSTANCE_UIDS[phase]);
   return DEFAULT_SERIES_INSTANCE_UIDS[phase] || DEFAULT_SERIES_INSTANCE_UIDS['收缩期'];
 }
 
