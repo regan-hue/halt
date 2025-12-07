@@ -34,6 +34,10 @@ export function useSTLViewer() {
   const context = ref(null);
   const fileStates = ref({});
   const planeActor = ref(null);
+  const progress = ref(0); // 加载进度 (0-100)
+  
+  // ========== 缓存管理 ==========
+  const stlCache = new Map(); // 缓存已加载的 STL 文件数据
 
   // ========== 工具函数 ==========
   
@@ -84,14 +88,26 @@ export function useSTLViewer() {
   }
 
   /**
-   * 加载单个 STL 文件
+   * 加载单个 STL 文件（带缓存优化）
    */
   async function loadSTLFile(file, phase, renderer, renderWindow) {
+    const cacheKey = `${phase}_${file.name}`;
+    
     try {
       console.log(`开始加载文件: ${file.name} (${phase})`);
       
-      // 使用 apiClient 从远程 API 获取 STL 文件
-      const arrayBuffer = await fetchSTLFile(file.name, phase);
+      let arrayBuffer;
+      
+      // 检查缓存
+      if (stlCache.has(cacheKey)) {
+        console.log(`从缓存加载: ${file.name}`);
+        arrayBuffer = stlCache.get(cacheKey);
+      } else {
+        // 从 API 获取并缓存
+        arrayBuffer = await fetchSTLFile(file.name, phase);
+        stlCache.set(cacheKey, arrayBuffer);
+        console.log(`已缓存文件: ${file.name}`);
+      }
       
       // 创建新的读取器、映射器和演员
       const stlReader = vtkSTLReader.newInstance();
@@ -160,6 +176,14 @@ export function useSTLViewer() {
       if (state.reader) state.reader.delete();
     });
     fileStates.value = {};
+  }
+
+  /**
+   * 清理缓存（可选，用于内存管理）
+   */
+  function clearCache() {
+    stlCache.clear();
+    console.log('STL 文件缓存已清理');
   }
 
   /**
@@ -316,11 +340,12 @@ export function useSTLViewer() {
   }
 
   /**
-   * 加载指定期相的所有 STL 文件
+   * 加载指定期相的所有 STL 文件（并行加载优化）
    */
   async function loadPhaseFiles(phase, renderer, renderWindow) {
     loading.value = true;
     error.value = null;
+    progress.value = 0;
     
     try {
       // 隐藏现有平面
@@ -338,22 +363,29 @@ export function useSTLViewer() {
       });
       fileStates.value = {};
 
-      // 加载新期相的文件
-      for (const file of STL_FILE_LIST) {
+      console.log(`开始并行加载 ${phase} 的 ${STL_FILE_LIST.length} 个 STL 文件...`);
+
+      // 并行加载所有文件，并跟踪进度
+      const loadPromises = STL_FILE_LIST.map(async (file, index) => {
         await loadSTLFile(file, phase, renderer, renderWindow);
-        // 稍微延迟，避免同时加载造成卡顿
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
+        // 更新进度
+        progress.value = Math.round(((index + 1) / STL_FILE_LIST.length) * 100);
+      });
+
+      // 等待所有文件加载完成
+      await Promise.all(loadPromises);
 
       // 重置相机并渲染
       renderer.resetCamera();
       renderWindow.render();
       
       loading.value = false;
+      progress.value = 100;
       console.log(`${phase} 所有文件加载完成`);
     } catch (err) {
       loading.value = false;
       error.value = err.message;
+      progress.value = 0;
       console.error('加载期相文件失败:', err);
     }
   }
@@ -428,6 +460,10 @@ export function useSTLViewer() {
       // 加载当前期相的文件
       await loadPhaseFiles(phase, renderer, renderWindow);
 
+      // 预加载另一个期相的文件
+      const otherPhase = phase === '收缩期' ? '舒张期' : '收缩期';
+      preloadPhaseFiles(otherPhase);
+
       loading.value = false;
       console.log('STL 3D 场景初始化完成');
     } catch (err) {
@@ -455,11 +491,45 @@ export function useSTLViewer() {
       hidePlane();
 
       await loadPhaseFiles(newPhase, renderer, renderWindow);
+      
+      // 预加载另一个期相的文件（如果有的话）
+      const otherPhase = newPhase === '收缩期' ? '舒张期' : '收缩期';
+      preloadPhaseFiles(otherPhase);
+      
       console.log(`期相切换完成: ${newPhase}`);
     } catch (err) {
       console.error(`期相切换失败: ${newPhase}`, err);
       throw err;
     }
+  }
+
+  /**
+   * 预加载指定期相的所有 STL 文件（后台加载，不影响当前显示）
+   */
+  async function preloadPhaseFiles(phase) {
+    if (!phase) return;
+    
+    console.log(`开始后台预加载 ${phase} 的 STL 文件...`);
+    
+    const preloadPromises = STL_FILE_LIST.map(async (file) => {
+      const cacheKey = `${phase}_${file.name}`;
+      if (!stlCache.has(cacheKey)) {
+        try {
+          const arrayBuffer = await fetchSTLFile(file.name, phase);
+          stlCache.set(cacheKey, arrayBuffer);
+          console.log(`预加载完成: ${file.name} (${phase})`);
+        } catch (error) {
+          console.warn(`预加载失败: ${file.name} (${phase})`, error);
+        }
+      }
+    });
+    
+    // 不等待完成，让它在后台运行
+    Promise.all(preloadPromises).then(() => {
+      console.log(`后台预加载 ${phase} 完成`);
+    }).catch((error) => {
+      console.warn(`后台预加载 ${phase} 出错:`, error);
+    });
   }
 
   /**
@@ -550,6 +620,7 @@ export function useSTLViewer() {
   return {
     loading,
     error,
+    progress,
     fileList: STL_FILE_LIST,
     fileStates,
     initialize,
