@@ -1,0 +1,16 @@
+services:
+  vtk-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vtk-app
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    networks:
+      - vtk-network
+
+networks:
+  vtk-network:
+    driver: bridge
+
