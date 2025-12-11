@@ -1,9 +1,9 @@
 services:
-  vtk-app:
+  halt-app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: vtk-app
+    container_name: halt-app
     ports:
       - "80:80"
     restart: unless-stopped
