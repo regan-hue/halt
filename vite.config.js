@@ -53,7 +53,7 @@ export default defineConfig({
     // 配置代理解决 CORS 问题
     proxy: {
       '/dicom-web': {
-        target: 'http://192.168.1.3:18997',
+        target: 'http://192.168.4.17:18997',
         changeOrigin: true,
         secure: false,
         ws: false,
@@ -67,7 +67,7 @@ export default defineConfig({
       },
       // 添加 Orthanc 原生 API 代理
       '/tools': {
-        target: 'http://192.168.1.3:18997',
+        target: 'http://192.168.4.17:18997',
         changeOrigin: true,
         secure: false,
         ws: false,
@@ -79,7 +79,7 @@ export default defineConfig({
         },
       },
       '/instances': {
-        target: 'http://192.168.1.3:18997',
+        target: 'http://192.168.4.17:18997',
         changeOrigin: true,
         secure: false,
         ws: false,
@@ -91,7 +91,7 @@ export default defineConfig({
         },
       },
       '/series': {
-        target: 'http://192.168.1.3:18997',
+        target: 'http://192.168.4.17:18997',
         changeOrigin: true,
         secure: false,
         ws: false,
@@ -102,9 +102,9 @@ export default defineConfig({
           })
         },
       },
-      // ⭐ 添加 WADO-URI 代理（根据Orthanc DICOMweb文档）
+    
       '/wado': {
-        target: 'http://192.168.1.3:18997',
+        target: 'http://192.168.4.17:18997',
         changeOrigin: true,
         secure: false,
         ws: false,
@@ -117,7 +117,7 @@ export default defineConfig({
       },
       // 添加 CAD API 代理，用于获取 STL 文件和测量数据
       '/cad': {
-        target: 'http://192.168.1.3:29999',
+        target: 'http://192.168.4.17:29999',
         changeOrigin: true,
         secure: false,
         ws: false,

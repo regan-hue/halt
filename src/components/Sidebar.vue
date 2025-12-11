@@ -263,7 +263,13 @@
              <div class="input-with-button">
                 <label>厚度 (mm): </label>
                 <input type="number" v-model="pfdThickness" step="0.1">
-                <button class="secondary-btn" @click="$emit('start-measure')">重新测量</button>
+                <button 
+                  class="secondary-btn" 
+                  :class="{ 'active-tool': measureToolActive }" 
+                  @click="toggleMeasureTool"
+                >
+                  {{ measureToolActive ? '📏 测量中...' : '📏 重新测量' }}
+                </button>
              </div>
              <p class="hint">提示: 点击测量工具在 MPR 放两点完成长度测量</p>
           </div>
@@ -311,7 +317,13 @@
         <div v-if="geoType === 'depth'" class="analysis-content">
              <h4>📏 瓣膜植入深度</h4>
              <div class="tool-panel">
-                <button class="secondary-btn" @click="$emit('start-measure')">测量工具</button>
+                <button 
+                  class="secondary-btn" 
+                  :class="{ 'active-tool': measureToolActive }" 
+                  @click="toggleMeasureTool"
+                >
+                  {{ measureToolActive ? '📏 测量中...' : '📏 测量工具' }}
+                </button>
                 <p class="hint">启动工具在MPR中放置两个点完成测量</p>
              </div>
              <div class="form-grid">
@@ -328,6 +340,11 @@
                     <input type="number" v-model="implantDepth.RC">
                 </div>
              </div>
+             
+             <div class="control-buttons mt-20">
+              <button class="secondary-btn" @click="$emit('locate-plane', 'inflow')">📍 定位平面</button>
+              <button class="secondary-btn" @click="$emit('restore-mpr')">🔄 恢复MPR</button>
+            </div>
         </div>
       </div>
 
@@ -350,7 +367,13 @@
         <div class="analysis-content mt-20">
             <div class="header-row">
                 <h4>交接对齐测量</h4>
-                <button class="small-btn" @click="$emit('start-measure')">角度测量</button>
+                <button 
+                  class="small-btn" 
+                  :class="{ 'active-tool': angleToolActive }" 
+                  @click="toggleAngleTool"
+                >
+                  {{ angleToolActive ? '📐 测量中...' : '📐 角度测量' }}
+                </button>
             </div>
             
             <div class="form-item-row">
@@ -562,6 +585,8 @@ const emit = defineEmits([
   'plane-level-change', 
   'start-measure',
   'stop-measure',
+  'start-angle-measure',
+  'stop-angle-measure',
   'undo-measurement',
   'toggle-virtual-valve', 
   'update-valve-opacity', 
@@ -1274,6 +1299,17 @@ async function exportReportPDF() {
     font-family: monospace;
 }
 
+.control-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.control-buttons button {
+    flex: 1;
+    min-width: 0;
+}
+
 .control-group {
     background: #132c48;
     padding: 10px;
@@ -1325,6 +1361,14 @@ async function exportReportPDF() {
     padding: 5px 10px;
     border-radius: 4px;
     cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.secondary-btn.active-tool {
+    background: #52c41a;
+    color: white;
+    border-color: #52c41a;
+    font-weight: 500;
 }
 
 .danger-btn {
@@ -1345,6 +1389,14 @@ async function exportReportPDF() {
     border-radius: 4px;
     font-size: 11px;
     cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.small-btn.active-tool {
+    background: #52c41a;
+    border: none;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(82, 196, 26, 0.4);
 }
 
 .header-row {
@@ -1371,32 +1423,52 @@ async function exportReportPDF() {
 }
 
 .form-grid {
-    display: flex;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
 }
 
 .form-item {
-    flex: 1;
     display: flex;
     flex-direction: column;
+    min-width: 0; /* 防止溢出 */
 }
 
 .form-item label {
     font-size: 11px;
     color: #666;
     margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .form-item input, .form-item select {
-    padding: 6px;
+    padding: 6px 4px;
     border: 1px solid #d9d9d9;
     border-radius: 4px;
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 12px;
 }
 
 .info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
     font-size: 12px;
     line-height: 1.6;
     color: #555;
+}
+
+.info-grid > div {
+    background: #f5f7fa;
+    padding: 8px;
+    border-radius: 4px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .info-message {
