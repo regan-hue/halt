@@ -429,12 +429,14 @@ export function useSTLViewer() {
 
       // 创建全屏渲染窗口
       // 尝试启用 preserveDrawingBuffer 以支持 canvas.toDataURL
+      // 强制使用 WebGL 1 以避免 GLSL ES 300 shader 编译问题
       const fullScreenRenderer = vtkFullScreenRenderWindow.newInstance({
         rootContainer: containerElement,
         background: [0.1, 0.1, 0.15], // 深色背景
         containerStyle: { height: '100%', width: '100%', position: 'absolute' },
         config: {
-          preserveDrawingBuffer: true
+          preserveDrawingBuffer: true,
+          webgl2: false // 强制使用 WebGL 1
         }
       });
 

@@ -98,7 +98,10 @@ class CustomOrientationMarkerTool extends AnnotationTool {
       renderer.setBackground(0, 0, 0);
       renderWindow.addRenderer(renderer);
 
-      const openglRenderWindow = vtkOpenGLRenderWindow.newInstance();
+      // 配置 OpenGL 渲染窗口，强制使用 WebGL 1 以避免 GLSL ES 300 兼容性问题
+      const openglRenderWindow = vtkOpenGLRenderWindow.newInstance({
+        webgl2: false // 强制使用 WebGL 1
+      });
       renderWindow.addView(openglRenderWindow);
       openglRenderWindow.setContainer(container);
 

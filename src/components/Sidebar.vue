@@ -1,7 +1,10 @@
 <template>
   <div class="sidebar">
     <div class="sidebar-header">
-      <h2>Halt 术后预测</h2>
+      <h2>
+        <img src="/CVPILOT-logo.png" alt="Logo" class="header-logo">
+        Halt 术后预测
+      </h2>
       <div class="phase-toggle">
         <button 
           :class="{ active: currentPhase === '收缩期' }" 
@@ -803,7 +806,17 @@ async function exportReportPDF() {
   margin: 0 0 10px 0;
   color: #4fc3f7;
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 300;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-logo {
+  width: 8em;
+  height: 8em;
+  object-fit: contain;
+  vertical-align: middle;
 }
 
 .phase-toggle {

@@ -1030,7 +1030,7 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
       eventTarget.removeEventListener(ToolsEnums.Events.ANNOTATION_REMOVED, onAnnotationRemoved);
       measurementHistory.value = [];
 
-      const localViewportIds = {
+      const viewportIds = {
         axial: 'axial-viewport',
         sagittal: 'sagittal-viewport',
         coronal: 'coronal-viewport',
@@ -1041,9 +1041,9 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
         const toolGroup = ToolGroupManager.getToolGroup(TOOL_GROUP_ID);
         if (toolGroup) {
           toolGroup.removeViewports(RENDERING_ENGINE_ID, [
-            localViewportIds.axial,
-            localViewportIds.sagittal,
-            localViewportIds.coronal,
+            viewportIds.axial,
+            viewportIds.sagittal,
+            viewportIds.coronal,
           ]);
         }
       } catch (e) {
