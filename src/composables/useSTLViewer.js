@@ -38,6 +38,9 @@ export function useSTLViewer() {
   
   // ========== 缓存管理 ==========
   const stlCache = new Map(); // 缓存已加载的 STL 文件数据
+  let hasResetCameraOnce = false; // 只在首次真正完成可视加载后 resetCamera，避免切换时跳动/耗时
+  let phaseLoadToken = 0; // 用于取消/去重期相切换，避免异步竞态导致显示停留在旧期相
+  let backgroundBuildToken = 0; // 用于取消后台构建任务（例如重新初始化后）
 
   // ========== 工具函数 ==========
   
@@ -90,7 +93,7 @@ export function useSTLViewer() {
   /**
    * 加载单个 STL 文件（带缓存优化）
    */
-  async function loadSTLFile(file, phase, renderer, renderWindow) {
+  async function loadSTLFile(file, phase, renderer, renderWindow, initialVisible = true) {
     const cacheKey = `${phase}_${file.name}`;
     
     try {
@@ -131,6 +134,7 @@ export function useSTLViewer() {
       
       // 设置演员
       actor.setMapper(mapper);
+      actor.setVisibility(Boolean(initialVisible));
       
       // 设置颜色
       const rgb = hexToRgb(file.color);
@@ -154,7 +158,7 @@ export function useSTLViewer() {
         actor,
         mapper,
         reader: stlReader,
-        visible: true
+        visible: Boolean(initialVisible)
       };
       
       console.log(`${file.name} 加载成功`);
@@ -342,51 +346,68 @@ export function useSTLViewer() {
   /**
    * 加载指定期相的所有 STL 文件（并行加载优化）
    */
-  async function loadPhaseFiles(phase, renderer, renderWindow) {
+  async function loadPhaseFiles(phase, renderer, renderWindow, token) {
     loading.value = true;
     error.value = null;
     progress.value = 0;
     
     try {
+      // 如果已经被新的切换请求取代，直接退出，避免覆盖最新显示
+      if (token !== phaseLoadToken) return { cancelled: true };
+
       // 隐藏现有平面
       hidePlane();
 
-      // 清理所有已加载的文件（不管是什么期相）
+      // 1) 先把“非当前期相”的 actor 全部隐藏（不 delete，避免反复 parse）
       Object.keys(fileStates.value).forEach(key => {
-        const state = fileStates.value[key];
-        if (state && state.actor) {
-          renderer.removeActor(state.actor);
-          state.actor.delete();
-          if (state.mapper) state.mapper.delete();
-          if (state.reader) state.reader.delete();
-        }
-      });
-      fileStates.value = {};
+        const state = fileStates.value[key]
+        if (!state?.actor) return
+        const isTargetPhase = key.startsWith(`${phase}_`)
+        state.visible = isTargetPhase
+        state.actor.setVisibility(isTargetPhase)
+      })
 
-      console.log(`开始并行加载 ${phase} 的 ${STL_FILE_LIST.length} 个 STL 文件...`);
+      console.log(`准备加载/显示 ${phase} 的 ${STL_FILE_LIST.length} 个 STL 文件...`);
 
-      // 并行加载所有文件，并跟踪进度
+      // 2) 确保当前期相的 actor 已存在；没有就增量加载（仍可并行 fetch，但 parse 可能较重）
       const loadPromises = STL_FILE_LIST.map(async (file, index) => {
-        await loadSTLFile(file, phase, renderer, renderWindow);
-        // 更新进度
-        progress.value = Math.round(((index + 1) / STL_FILE_LIST.length) * 100);
-      });
+        if (token !== phaseLoadToken) return
+        const fileKey = `${phase}_${file.name}`
+        if (!fileStates.value[fileKey]) {
+          await loadSTLFile(file, phase, renderer, renderWindow, true)
+        } else {
+          // 已存在则只切换可见
+          const state = fileStates.value[fileKey]
+          if (state?.actor) {
+            state.visible = true
+            state.actor.setVisibility(true)
+          }
+        }
+        progress.value = Math.round(((index + 1) / STL_FILE_LIST.length) * 100)
+      })
 
-      // 等待所有文件加载完成
-      await Promise.all(loadPromises);
+      await Promise.all(loadPromises)
+      if (token !== phaseLoadToken) return { cancelled: true };
 
-      // 重置相机并渲染
-      renderer.resetCamera();
-      renderWindow.render();
+      // 3) 首次加载完成后 resetCamera；后续切换保持相机状态（更快也更符合用户预期）
+      if (!hasResetCameraOnce) {
+        renderer.resetCamera()
+        hasResetCameraOnce = true
+      }
+      renderWindow.render()
       
       loading.value = false;
       progress.value = 100;
       console.log(`${phase} 所有文件加载完成`);
+      return { cancelled: false };
     } catch (err) {
+      // 如果是被取消的切换，不视为错误（避免干扰 UI）
+      if (token !== phaseLoadToken) return { cancelled: true };
       loading.value = false;
       error.value = err.message;
       progress.value = 0;
       console.error('加载期相文件失败:', err);
+      return { cancelled: false, error: err };
     }
   }
 
@@ -426,6 +447,10 @@ export function useSTLViewer() {
         context.value.fullScreenRenderer.delete();
         context.value = null;
       }
+      // 新上下文应重新 resetCamera
+      hasResetCameraOnce = false;
+      // 取消旧的后台构建
+      backgroundBuildToken++;
 
       // 创建全屏渲染窗口
       // 尝试启用 preserveDrawingBuffer 以支持 canvas.toDataURL
@@ -460,11 +485,35 @@ export function useSTLViewer() {
       };
 
       // 加载当前期相的文件
-      await loadPhaseFiles(phase, renderer, renderWindow);
+      const token = ++phaseLoadToken
+      await loadPhaseFiles(phase, renderer, renderWindow, token);
 
       // 预加载另一个期相的文件
       const otherPhase = phase === '收缩期' ? '舒张期' : '收缩期';
       preloadPhaseFiles(otherPhase);
+
+      // 后台构建另一期相的 actor（隐藏状态），降低第一次切换到另一期相的卡顿
+      setTimeout(async () => {
+        try {
+          if (!context.value) return
+          const bgToken = backgroundBuildToken
+          console.log(`开始后台构建 ${otherPhase} 的 STL actor（隐藏）...`)
+          for (let i = 0; i < STL_FILE_LIST.length; i++) {
+            if (bgToken !== backgroundBuildToken) return
+            const file = STL_FILE_LIST[i]
+            const fileKey = `${otherPhase}_${file.name}`
+            if (!fileStates.value[fileKey]) {
+              await loadSTLFile(file, otherPhase, renderer, renderWindow, false)
+              // 分帧让出主线程，避免后台预处理也造成卡顿
+              await new Promise(resolve => setTimeout(resolve, 0))
+            }
+          }
+          renderWindow.render()
+          console.log(`后台构建 ${otherPhase} 完成`)
+        } catch (e) {
+          console.warn(`后台构建 ${otherPhase} 失败:`, e)
+        }
+      }, 300);
 
       loading.value = false;
       console.log('STL 3D 场景初始化完成');
@@ -492,7 +541,12 @@ export function useSTLViewer() {
       // 隐藏现有平面
       hidePlane();
 
-      await loadPhaseFiles(newPhase, renderer, renderWindow);
+      const token = ++phaseLoadToken
+      const result = await loadPhaseFiles(newPhase, renderer, renderWindow, token);
+      if (result?.cancelled) {
+        console.log(`期相切换被取消（已有更新请求）: ${newPhase}`)
+        return
+      }
       
       // 预加载另一个期相的文件（如果有的话）
       const otherPhase = newPhase === '收缩期' ? '舒张期' : '收缩期';

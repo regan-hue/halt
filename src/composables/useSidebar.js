@@ -36,7 +36,7 @@ export function useSidebar(props, emit) {
 
   // PFD - 临时数据（编辑中）
   const pfdResult = ref('exists');
-  const pfdThickness = ref(23.6);
+  const pfdThickness = ref(0);
   
   // PFD - 已保存数据（用于报告）
   const savedPfdResult = ref(null);
@@ -57,6 +57,8 @@ export function useSidebar(props, emit) {
    * 设置当前期相
    */
   function setPhase(phase) {
+    // 去重：重复点击同一期相不触发昂贵的全局切换
+    if (phase === currentPhase.value) return;
     currentPhase.value = phase;
     emit('phase-change', phase);
   }

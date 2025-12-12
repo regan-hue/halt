@@ -55,6 +55,8 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
    * 处理期相变化
    */
   function handlePhaseChange(phase) {
+    // 去重：避免重复设置导致下游 watcher 重复执行切换
+    if (phase === currentPhase.value) return;
     currentPhase.value = phase;
   }
 

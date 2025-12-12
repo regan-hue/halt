@@ -503,11 +503,6 @@
                 <div class="data-row"><span>RCA to LCC/NCC</span><span class="data-value">{{ formatNum(alignmentAngles.RCA_LCC_NCC) }}°</span></div>
                 <div class="data-row"><span>RCA to NCC/RCC</span><span class="data-value">{{ formatNum(alignmentAngles.RCA_NCC_RCC) }}°</span></div>
             </div>
-
-            <p class="mt-10"><strong>形态改变评估</strong></p>
-            <div class="info-grid">
-                <div>评估结果: {{ morphologyChange === 'none' ? '无形态改变' : morphologyChange === 'exists' ? '存在形态改变' : '未填写' }}</div>
-            </div>
         </div>
         
         <!-- 图像管理部分 -->

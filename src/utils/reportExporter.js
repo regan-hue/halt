@@ -404,17 +404,6 @@ export async function exportReportPDF(reportData, filename = 'halt-report') {
       alignmentData.push(['RCA to NCC/RCC', `${formatValue(alignment.angles.RCA_NCC_RCC)}°`]);
     }
 
-    if (alignment.morphologyChange) {
-      if (fontLoaded) {
-        const morphologyMap = { 
-          'none': '无形态改变', 
-          'exists': '存在形态改变', 
-          'unfilled': '未填写' 
-        };
-        alignmentData.push(['形态改变', morphologyMap[alignment.morphologyChange] || alignment.morphologyChange]);
-      }
-    }
-
     if (alignmentData.length > 0) {
       autoTable(doc, {
         startY: yPos,
@@ -822,12 +811,6 @@ function generateReportText(reportData) {
       text += `  RCA to RCC/LCC: ${formatValue(alignment.angles.RCA_RCC_LCC)}°\n`;
       text += `  RCA to LCC/NCC: ${formatValue(alignment.angles.RCA_LCC_NCC)}°\n`;
       text += `  RCA to NCC/RCC: ${formatValue(alignment.angles.RCA_NCC_RCC)}°\n`;
-      text += '\n';
-    }
-    
-    if (alignment.morphologyChange) {
-      const morphologyMap = { 'none': '无形态改变', 'exists': '存在形态改变', 'unfilled': '未填写' };
-      text += `形态改变评估: ${morphologyMap[alignment.morphologyChange] || alignment.morphologyChange}\n`;
       text += '\n';
     }
   }

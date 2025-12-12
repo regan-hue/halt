@@ -581,52 +581,60 @@ defineExpose({
   updateWaveRotation
 })
 
-// 监听 seriesInstanceUID 变化，切换体积
-watch(() => props.seriesInstanceUID, async (newUID, oldUID) => {
-  // 只在UID真正变化时切换体积
-  if (newUID && newUID !== oldUID) {
-    try {
-      console.log(`DICOM 系列变化: ${oldUID} -> ${newUID}`)
-      
-      // 如果viewports已初始化，使用switchVolume切换体积
-      // 否则需要先初始化
-      if (viewport1.value && viewport2.value && viewport3.value) {
-        // 检查是否已经初始化（通过检查loading状态，如果为false且没有error，说明已初始化）
-        if (!loading.value && !error.value) {
-          // 已初始化，直接切换体积
-          await switchVolume(newUID)
-        } else {
-          // 未初始化，需要先初始化
-          await initialize(viewport1.value, viewport2.value, viewport3.value)
+// 期相切换会同时触发 DICOM seriesInstanceUID 与 STL phase 的更新；
+// 这里合并监听并做“UI 先更新 + 任务去重/取消”，避免点击后长时间无反应。
+const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => resolve()))
+let switchToken = 0
+watch(
+  () => [props.seriesInstanceUID, props.currentPhase],
+  async ([newUID, newPhase], [oldUID, oldPhase]) => {
+    const token = ++switchToken
+
+    const uidChanged = Boolean(newUID && newUID !== oldUID)
+    const phaseChanged = Boolean(newPhase && newPhase !== oldPhase)
+    if (!uidChanged && !phaseChanged) return
+
+    // 让侧边栏按钮等 UI 有机会先完成渲染，再开始重操作
+    await nextTick()
+    await nextFrame()
+    if (token !== switchToken) return
+
+    // 1) DICOM：seriesInstanceUID 变化时切换体积
+    if (uidChanged) {
+      try {
+        console.log(`DICOM 系列变化: ${oldUID} -> ${newUID}`)
+        if (viewport1.value && viewport2.value && viewport3.value) {
+          if (!loading.value && !error.value) {
+            await switchVolume(newUID)
+          } else {
+            await initialize(viewport1.value, viewport2.value, viewport3.value)
+          }
         }
-      }
-    } catch (err) {
-      console.error('切换体积失败:', err)
-      // 如果切换失败，尝试重新初始化
-      if (viewport1.value && viewport2.value && viewport3.value) {
-        try {
-          cleanup()
-          await new Promise(resolve => setTimeout(resolve, 200))
-          await initialize(viewport1.value, viewport2.value, viewport3.value)
-        } catch (initErr) {
-          console.error('重新初始化失败:', initErr)
+      } catch (err) {
+        console.error('切换体积失败:', err)
+        if (token !== switchToken) return
+        if (viewport1.value && viewport2.value && viewport3.value) {
+          try {
+            cleanup()
+            await new Promise(resolve => setTimeout(resolve, 200))
+            await initialize(viewport1.value, viewport2.value, viewport3.value)
+          } catch (initErr) {
+            console.error('重新初始化失败:', initErr)
+          }
         }
       }
     }
-  }
-}, { immediate: false })
 
-// 监听期相变化，切换 STL 文件
-watch(() => props.currentPhase, async (newPhase, oldPhase) => {
-  if (newPhase && newPhase !== oldPhase) {
-    console.log(`期相变化: ${oldPhase} -> ${newPhase}`)
-    if (stlViewport.value) {
+    if (token !== switchToken) return
+
+    // 2) STL：期相变化时切换模型
+    if (phaseChanged && stlViewport.value) {
+      console.log(`期相变化: ${oldPhase} -> ${newPhase}`)
       try {
-        // 如果 STL 查看器已初始化，切换期相
         await switchSTLPhase(newPhase)
       } catch (err) {
         console.error('切换期相失败:', err)
-        // 如果切换失败，尝试重新初始化
+        if (token !== switchToken) return
         try {
           await initializeSTL(stlViewport.value, newPhase)
         } catch (initErr) {
@@ -634,8 +642,9 @@ watch(() => props.currentPhase, async (newPhase, oldPhase) => {
         }
       }
     }
-  }
-}, { immediate: false })
+  },
+  { immediate: false, flush: 'post' }
+)
 </script>
 
 <style scoped>
