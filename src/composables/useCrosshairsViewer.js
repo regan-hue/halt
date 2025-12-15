@@ -665,7 +665,9 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
     if (isWaveImageVisible) {
       if (!waveImageElement) {
         waveImageElement = document.createElement('img');
-        waveImageElement.src = '/wave.png';
+        // 使用 import.meta.env.BASE_URL 来获取 base 路径，确保在设置了 base: '/halt/' 后也能正确访问
+        const baseURL = import.meta.env.BASE_URL || '/';
+        waveImageElement.src = `${baseURL}wave.png`.replace(/\/\//g, '/'); // 处理可能的双斜杠
         waveImageElement.style.position = 'absolute';
         waveImageElement.style.pointerEvents = 'none';
         waveImageElement.style.transform = `translate(-50%, -50%) rotate(${waveRotation}deg)`;

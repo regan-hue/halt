@@ -2,7 +2,7 @@
   <div class="sidebar">
     <div class="sidebar-header">
       <h2>
-        <img src="/CVPILOT-logo.png" alt="Logo" class="header-logo">
+        <img :src="`${baseURL}CVPILOT-logo.png`" alt="Logo" class="header-logo">
         Halt 术后预测
       </h2>
       <div class="phase-toggle">
@@ -574,6 +574,9 @@ import { ref, watch, onMounted } from 'vue';
 import { useSidebar } from '../composables/useSidebar.js';
 import { useSavedImages } from '../composables/useSavedImages.js';
 import { collectReportData, exportReportPDF as exportPDF } from '../utils/reportExporter.js';
+
+// 获取 base URL，确保在设置了 base: '/halt/' 后也能正确访问 public 目录中的文件
+const baseURL = import.meta.env.BASE_URL || '/';
 
 const props = defineProps(['initialPhase', 'geometricData', 'savedViewStates', 'loadGeometricDataForBothPhases']);
 const emit = defineEmits([

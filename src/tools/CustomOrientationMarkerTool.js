@@ -116,7 +116,10 @@ class CustomOrientationMarkerTool extends AnnotationTool {
       interactor.setInteractorStyle(interactorStyle);
 
       // 加载STL模型
-      const stlPath = '/Human.stl';
+      // 使用 import.meta.env.BASE_URL 来获取 base 路径，确保在设置了 base: '/halt/' 后也能正确访问
+      const baseURL = import.meta.env.BASE_URL || '/';
+      const stlPath = `${baseURL}Human.stl`.replace(/\/\//g, '/'); // 处理可能的双斜杠
+      console.log('加载 Human.stl 从路径:', stlPath);
       const response = await fetch(stlPath);
       
       if (!response.ok) {

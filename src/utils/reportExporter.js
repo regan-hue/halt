@@ -26,7 +26,10 @@ function arrayBufferToBase64(buffer) {
  */
 async function loadChineseFont(doc) {
   try {
-    const response = await fetch('/fonts/SimHei.ttf');
+    // 使用 import.meta.env.BASE_URL 来获取 base 路径，确保在设置了 base: '/halt/' 后也能正确访问
+    const baseURL = import.meta.env.BASE_URL || '/';
+    const fontPath = `${baseURL}fonts/SimHei.ttf`.replace(/\/\//g, '/'); // 处理可能的双斜杠
+    const response = await fetch(fontPath);
     if (!response.ok) {
       console.warn('无法加载中文字体文件，将使用默认字体');
       return false;
