@@ -18,8 +18,8 @@ RUN npm run build
 # 运行阶段 - 使用 nginx
 FROM nginx:alpine
 
-# 复制构建产物到 nginx 目录
-COPY --from=builder /app/dist /usr/share/nginx/html
+# 复制构建产物到 nginx 的 halt 子目录
+COPY --from=builder /app/dist /usr/share/nginx/html/halt
 
 # 复制 nginx 配置文件
 COPY nginx.conf /etc/nginx/conf.d/default.conf

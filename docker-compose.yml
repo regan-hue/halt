@@ -5,12 +5,6 @@ services:
       dockerfile: Dockerfile
     container_name: halt-app
     ports:
-      - "80:80"
+      - "18888:80"
     restart: unless-stopped
-    networks:
-      - vtk-network
-
-networks:
-  vtk-network:
-    driver: bridge
 
