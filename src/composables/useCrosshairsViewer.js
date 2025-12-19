@@ -136,6 +136,11 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
   let cameraModifiedListeners = []; // 保存相机变化监听器，用于清除
   let planeGeometryVisible = false; // 标记平面几何是否可见
   let cameraChangeHandler = null; // 保存相机变化处理函数引用
+  let crosshairPositionChangeHandler = null; // 保存crosshair位置变化处理函数引用
+  let lastCrosshairPosition = null; // 保存上次crosshair位置
+  let customSVGElements = []; // 保存自定义绘制的SVG元素
+  let customCurveData = {}; // 保存自定义曲线的世界坐标数据，用于缩放时重绘 {viewportId: {points: [], uid: '', style: {}}}
+  let cameraModifiedListenersForCurves = []; // 保存曲线更新的相机监听器
   
   // Wave Image 相关
   let axialContainer = null;
@@ -1055,6 +1060,9 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
 
       // 移除相机变化监听器
       removePlaneGeometryCameraListener();
+      
+      // 移除自定义曲线的相机监听器
+      removeCustomCurveCameraListeners();
 
       const viewportIds = {
         axial: 'axial-viewport',
@@ -1185,7 +1193,7 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
    * 清除平面标注
    */
   function clearPlaneAnnotations() {
-    if (planeAnnotationsUIDs.length === 0 && diameterAnnotationsUIDs.length === 0 && curveAnnotationsUIDs.length === 0) return;
+    if (planeAnnotationsUIDs.length === 0 && diameterAnnotationsUIDs.length === 0 && curveAnnotationsUIDs.length === 0 && customSVGElements.length === 0) return;
     
     try {
       const annotationState = annotation.state;
@@ -1210,15 +1218,26 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
       });
       diameterAnnotationsUIDs = [];
       
-      // 清除曲线标注
-      curveAnnotationsUIDs.forEach(uid => {
+      // 清除曲线标注（现在是空的，因为不再使用annotation）
+      curveAnnotationsUIDs = [];
+      
+      // 清除自定义绘制的SVG元素
+      customSVGElements.forEach(element => {
         try {
-          annotationState.removeAnnotation(uid);
+          if (element && element.parentNode) {
+            element.parentNode.removeChild(element);
+          }
         } catch (err) {
-          console.warn('移除曲线annotation失败:', uid, err);
+          console.warn('移除SVG元素失败:', err);
         }
       });
-      curveAnnotationsUIDs = [];
+      customSVGElements = [];
+      
+      // 清除自定义曲线数据
+      customCurveData = {};
+      
+      // 移除自定义曲线的相机监听器
+      removeCustomCurveCameraListeners();
       
       // 重置可见标志
       planeGeometryVisible = false;
@@ -1270,8 +1289,8 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
   }
 
   /**
-   * 设置相机变化监听器
-   * 当MPR位置变化时，隐藏平面几何图形
+   * 设置crosshair位置变化监听器
+   * 当crosshair位置变化时，隐藏平面几何图形
    */
   function setupPlaneGeometryCameraListener() {
     if (!renderingEngine || !viewportIds) return;
@@ -1279,56 +1298,245 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
     // 如果已有监听器，先移除
     removePlaneGeometryCameraListener();
     
-    // 创建相机变化处理函数
-    cameraChangeHandler = throttle(() => {
-      // 只有当几何图形可见时才需要隐藏
-      if (planeGeometryVisible) {
-        console.log('检测到相机变化，隐藏平面几何图形');
-        clearPlaneAnnotations();
-      }
-    }, 100); // 100ms节流
-    
-    // 为所有视图添加相机变化监听
+    // 初始化位置记录（记录当前crosshair位置作为起始位置）
     try {
-      ['axial', 'sagittal', 'coronal'].forEach(viewName => {
+      const toolGroup = ToolGroupManager.getToolGroup(TOOL_GROUP_ID);
+      if (toolGroup) {
+        const crosshairsTool = toolGroup.getToolInstance(CrosshairsTool.toolName);
+        if (crosshairsTool && crosshairsTool.toolCenter) {
+          lastCrosshairPosition = [...crosshairsTool.toolCenter];
+        } else {
+          lastCrosshairPosition = null;
+        }
+      } else {
+        lastCrosshairPosition = null;
+      }
+    } catch (e) {
+      console.warn('初始化crosshair位置失败:', e);
+      lastCrosshairPosition = null;
+    }
+    
+    // 创建crosshair位置检查函数（使用requestAnimationFrame轮询）
+    let rafId = null;
+    const CHECK_INTERVAL = 100; // 100ms检查一次
+    let lastCheckTime = 0;
+    
+    const checkCrosshairPosition = (timestamp) => {
+      // 如果几何图形已不可见，停止监听
+      if (!planeGeometryVisible) {
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        return;
+      }
+      
+      // 节流：只在达到检查间隔时才执行
+      if (timestamp - lastCheckTime >= CHECK_INTERVAL) {
         try {
-          const viewport = renderingEngine.getViewport(viewportIds[viewName]);
-          if (viewport && viewport.element) {
-            viewport.element.addEventListener(Enums.Events.CAMERA_MODIFIED, cameraChangeHandler);
-            console.log(`已为 ${viewName} 视图添加相机变化监听`);
+          const toolGroup = ToolGroupManager.getToolGroup(TOOL_GROUP_ID);
+          if (toolGroup) {
+            const crosshairsTool = toolGroup.getToolInstance(CrosshairsTool.toolName);
+            if (crosshairsTool && crosshairsTool.toolCenter) {
+              const currentPosition = crosshairsTool.toolCenter;
+              
+              // 检查位置是否改变（使用阈值避免微小变化触发）
+              if (lastCrosshairPosition && (
+                  Math.abs(currentPosition[0] - lastCrosshairPosition[0]) > 0.5 ||
+                  Math.abs(currentPosition[1] - lastCrosshairPosition[1]) > 0.5 ||
+                  Math.abs(currentPosition[2] - lastCrosshairPosition[2]) > 0.5)) {
+                
+                // 位置改变了，清除平面几何图形
+                console.log('检测到crosshair位置变化，隐藏平面几何图形');
+                clearPlaneAnnotations();
+                lastCrosshairPosition = null; // 重置
+                
+                // 停止监听
+                if (rafId) {
+                  cancelAnimationFrame(rafId);
+                  rafId = null;
+                }
+                return;
+              }
+            }
           }
         } catch (e) {
-          console.warn(`为 ${viewName} 添加相机监听失败:`, e);
+          console.warn('检查crosshair位置失败:', e);
         }
-      });
-    } catch (err) {
-      console.error('设置相机变化监听器失败:', err);
-    }
+        
+        lastCheckTime = timestamp;
+      }
+      
+      // 继续下一帧
+      rafId = requestAnimationFrame(checkCrosshairPosition);
+    };
+    
+    // 启动监听
+    rafId = requestAnimationFrame(checkCrosshairPosition);
+    crosshairPositionChangeHandler = () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    };
+    
+    console.log('已设置crosshair位置变化监听');
   }
 
   /**
-   * 移除相机变化监听器
+   * 移除crosshair位置变化监听器
    */
   function removePlaneGeometryCameraListener() {
-    if (!cameraChangeHandler || !renderingEngine || !viewportIds) return;
+    if (crosshairPositionChangeHandler) {
+      crosshairPositionChangeHandler();
+      crosshairPositionChangeHandler = null;
+    }
+    lastCrosshairPosition = null;
+    console.log('已移除crosshair位置变化监听器');
+  }
+
+  /**
+   * 在 SVG 上直接绘制闭合曲线
+   */
+  function drawClosedCurveOnSVG(viewport, points, uid, style) {
+    try {
+      // 获取 viewport 的 SVG 容器
+      const svgLayer = viewport.element.querySelector('svg');
+      if (!svgLayer) {
+        console.warn('未找到 SVG layer');
+        return;
+      }
+      
+      // 将世界坐标转换为画布坐标
+      const canvasPoints = points.map(point => {
+        const canvasPos = viewport.worldToCanvas(point);
+        return canvasPos;
+      });
+      
+      // 创建 SVG polyline 元素（闭合曲线）
+      const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      
+      // 构建 points 属性值（添加第一个点到末尾形成闭合曲线）
+      const pointsStr = [...canvasPoints, canvasPoints[0]].map(p => `${p[0]},${p[1]}`).join(' ');
+      polyline.setAttribute('points', pointsStr);
+      
+      // 设置样式
+      polyline.setAttribute('stroke', style.color);
+      polyline.setAttribute('stroke-width', style.lineWidth);
+      polyline.setAttribute('fill', 'none');
+      polyline.setAttribute('stroke-linecap', 'round');
+      polyline.setAttribute('stroke-linejoin', 'round');
+      
+      if (style.lineDash) {
+        polyline.setAttribute('stroke-dasharray', style.lineDash);
+      }
+      
+      // 添加自定义属性用于标识
+      polyline.setAttribute('data-custom-curve', uid);
+      polyline.setAttribute('data-curve-type', 'closed');
+      
+      // 添加到 SVG
+      svgLayer.appendChild(polyline);
+      
+      // 保存引用和世界坐标数据
+      customSVGElements.push(polyline);
+      
+      // 保存世界坐标数据，用于缩放时重绘
+      const viewportId = viewport.id;
+      if (!customCurveData[viewportId]) {
+        customCurveData[viewportId] = [];
+      }
+      customCurveData[viewportId].push({
+        points: points, // 世界坐标
+        uid: uid,
+        style: style,
+        polyline: polyline
+      });
+      
+      console.log(`已在SVG上绘制闭合曲线: ${uid}，点数: ${points.length}`);
+    } catch (err) {
+      console.error('绘制闭合曲线失败:', err);
+    }
+  }
+  
+  /**
+   * 更新自定义曲线的画布坐标（当相机变化时调用）
+   */
+  function updateCustomCurvesOnViewport(viewport) {
+    try {
+      const viewportId = viewport.id;
+      const curves = customCurveData[viewportId];
+      
+      if (!curves || curves.length === 0) {
+        return;
+      }
+      
+      curves.forEach(curveData => {
+        const { points, polyline } = curveData;
+        
+        // 重新将世界坐标转换为画布坐标
+        const canvasPoints = points.map(point => {
+          const canvasPos = viewport.worldToCanvas(point);
+          return canvasPos;
+        });
+        
+        // 更新 polyline 的 points 属性
+        const pointsStr = [...canvasPoints, canvasPoints[0]].map(p => `${p[0]},${p[1]}`).join(' ');
+        polyline.setAttribute('points', pointsStr);
+      });
+    } catch (err) {
+      console.warn('更新自定义曲线失败:', err);
+    }
+  }
+  
+  /**
+   * 设置自定义曲线的相机监听器
+   */
+  function setupCustomCurveCameraListeners() {
+    if (!renderingEngine || !viewportIds) return;
+    
+    // 先移除旧的监听器
+    removeCustomCurveCameraListeners();
     
     try {
       ['axial', 'sagittal', 'coronal'].forEach(viewName => {
-        try {
-          const viewport = renderingEngine.getViewport(viewportIds[viewName]);
-          if (viewport && viewport.element) {
-            viewport.element.removeEventListener(Enums.Events.CAMERA_MODIFIED, cameraChangeHandler);
-          }
-        } catch (e) {
-          console.warn(`移除 ${viewName} 相机监听失败:`, e);
-        }
+        const viewport = renderingEngine.getViewport(viewportIds[viewName]);
+        if (!viewport || !viewport.element) return;
+        
+        // 使用节流的相机变化处理函数
+        const handleCameraModified = rafThrottle(() => {
+          updateCustomCurvesOnViewport(viewport);
+        });
+        
+        // 监听相机变化事件
+        viewport.element.addEventListener(Enums.Events.CAMERA_MODIFIED, handleCameraModified);
+        
+        // 保存监听器引用以便清理
+        cameraModifiedListenersForCurves.push({
+          element: viewport.element,
+          handler: handleCameraModified
+        });
       });
-      console.log('已移除相机变化监听器');
+      
+      console.log('已设置自定义曲线的相机监听器');
     } catch (err) {
-      console.error('移除相机变化监听器失败:', err);
+      console.error('设置自定义曲线相机监听器失败:', err);
     }
-    
-    cameraChangeHandler = null;
+  }
+  
+  /**
+   * 移除自定义曲线的相机监听器
+   */
+  function removeCustomCurveCameraListeners() {
+    cameraModifiedListenersForCurves.forEach(({ element, handler }) => {
+      try {
+        element.removeEventListener(Enums.Events.CAMERA_MODIFIED, handler);
+      } catch (err) {
+        console.warn('移除相机监听器失败:', err);
+      }
+    });
+    cameraModifiedListenersForCurves = [];
+    console.log('已移除自定义曲线的相机监听器');
   }
 
   /**
@@ -1369,56 +1577,18 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
         const viewPlaneNormal = camera.viewPlaneNormal || [0, 0, -1];
         const viewUp = camera.viewUp || [0, -1, 0];
         
-        // 1. 绘制less_points组成的曲线（用连续的线段）- 绿色
-        console.log(`在视图 ${viewportId} 绘制less_points曲线，点数:`, less_points.length);
-        for (let i = 0; i < less_points.length - 1; i++) {
-          const point1 = less_points[i];
-          const point2 = less_points[i + 1];
-          
-          const annotationUID = `plane_curve_${viewportId}_${Date.now()}_${i}`;
-          const newAnnotation = {
-            annotationUID,
-            highlighted: false,
-            invalidated: false,
-            metadata: {
-              viewPlaneNormal: [...viewPlaneNormal],
-              viewUp: [...viewUp],
-              FrameOfReferenceUID: viewport.getFrameOfReferenceUID?.() || '',
-              referencedImageId: '',
-              toolName: 'Length',
-            },
-            data: {
-              handles: {
-                points: [[...point1], [...point2]],
-                activeHandleIndex: null,
-                textBox: {
-                  hasMoved: false,
-                  worldPosition: [0, 0, 0],
-                  worldBoundingBox: {
-                    topLeft: [0, 0, 0],
-                    topRight: [0, 0, 0],
-                    bottomLeft: [0, 0, 0],
-                    bottomRight: [0, 0, 0],
-                  }
-                }
-              },
-              label: '', // 不显示标签
-              cachedStats: {}
-            },
-            isLocked: true, // 锁定，不允许编辑
-            isVisible: true,
-            // 自定义样式（存储在顶层，用于后续处理）
-            customStyle: {
-              color: 'rgb(0, 255, 0)', // 绿色
-              lineWidth: 2,
-              lineDash: '' // 实线
-            }
-          };
-          
-          annotation.state.addAnnotation(newAnnotation, viewportId);
-          planeAnnotationsUIDs.push(annotationUID);
-          curveAnnotationsUIDs.push(annotationUID);
-        }
+        // 1. 绘制less_points组成的闭合曲线 - 红色
+        console.log(`在视图 ${viewportId} 绘制less_points闭合曲线，点数:`, less_points.length);
+        
+        // 直接在 SVG 上绘制闭合曲线，不使用 LengthTool
+        const curveUID = `plane_curve_${viewportId}_${Date.now()}`;
+        drawClosedCurveOnSVG(viewport, less_points, curveUID, {
+          color: 'rgb(255, 0, 0)', // 红色
+          lineWidth: 2,
+          lineDash: ''
+        });
+        
+        curveAnnotationsUIDs.push(curveUID);
 
         // 2. 绘制最长径 - 黄色虚线
         if (max_dist_pair && Array.isArray(max_dist_pair) && max_dist_pair.length === 2) {
@@ -1524,6 +1694,9 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
       // 标记几何图形可见
       planeGeometryVisible = true;
       
+      // 设置自定义曲线的相机监听器（用于在缩放时更新曲线位置）
+      setupCustomCurveCameraListeners();
+      
       // 刷新所有视图
       renderingEngine.renderViewports([
         viewportIds.axial,
@@ -1532,9 +1705,16 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
       ]);
       
       // 延迟应用自定义样式（等待 SVG 渲染完成）
+      // 多次尝试应用样式，因为SVG可能延迟渲染
       setTimeout(() => {
         applyCustomStylesToAnnotations();
       }, 100);
+      setTimeout(() => {
+        applyCustomStylesToAnnotations();
+      }, 300);
+      setTimeout(() => {
+        applyCustomStylesToAnnotations();
+      }, 500);
       
     } catch (err) {
       console.error('绘制平面几何失败:', err);
@@ -1587,10 +1767,19 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
                   }
                 });
                 
-                // 隐藏文本标签（如果有）
-                const texts = svgElement.querySelectorAll('text');
+                // 隐藏文本标签和距离标注（如果有）
+                const texts = svgElement.querySelectorAll('text, .annotation-text, .distance-label');
                 texts.forEach(text => {
                   text.style.display = 'none';
+                  text.style.visibility = 'hidden';
+                  text.setAttribute('display', 'none');
+                });
+                
+                // 也隐藏可能的标注容器
+                const labelContainers = svgElement.querySelectorAll('.annotation-label, .measurement-label, [class*="label"]');
+                labelContainers.forEach(container => {
+                  container.style.display = 'none';
+                  container.style.visibility = 'hidden';
                 });
               });
             } catch (e) {
@@ -1685,8 +1874,9 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
         await applyPlanePosition(less_points);
         
         // 规范化max_dist_pair和min_dist_pair为数字数组
-        let max_dist_pair = planeData.max_dist_pair;
-        let min_dist_pair = planeData.min_dist_pair;
+        // 注意：这里交换了max和min，因为数据源中标反了
+        let max_dist_pair = planeData.min_dist_pair;
+        let min_dist_pair = planeData.max_dist_pair;
         
         if (max_dist_pair && Array.isArray(max_dist_pair)) {
           max_dist_pair = max_dist_pair.map(pt => {
