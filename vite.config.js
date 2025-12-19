@@ -43,7 +43,7 @@ export default defineConfig({
     }
   },
   server: {
-    host: '0.0.0.0',
+    
     port: 3002,
     open: true,
     // ⭐ 关键：添加响应头以启用 SharedArrayBuffer
@@ -54,7 +54,7 @@ export default defineConfig({
     // 配置代理解决 CORS 问题
     proxy: {
       '/dicom-web': {
-        target: 'http://192.168.4.16:18997',
+        target: 'http://localhost:18997',
         changeOrigin: true,
         secure: false,
         ws: false,
@@ -68,7 +68,7 @@ export default defineConfig({
       },
       // 添加 Orthanc 原生 API 代理
       '/tools': {
-        target: 'http://192.168.4.16:18997',
+        target: 'http://localhost:18997',
         changeOrigin: true,
         secure: false,
         ws: false,
@@ -80,7 +80,7 @@ export default defineConfig({
         },
       },
       '/instances': {
-        target: 'http://192.168.4.16:18997',
+        target: 'http://localhost:18997',
         changeOrigin: true,
         secure: false,
         ws: false,
@@ -92,7 +92,7 @@ export default defineConfig({
         },
       },
       '/series': {
-        target: 'http://192.168.4.16:18997',
+        target: 'http://localhost:18997',
         changeOrigin: true,
         secure: false,
         ws: false,
@@ -105,7 +105,7 @@ export default defineConfig({
       },
     
       '/wado': {
-        target: 'http://192.168.4.16:18997',
+        target: 'http://localhost:18997',
         changeOrigin: true,
         secure: false,
         ws: false,
@@ -119,13 +119,13 @@ export default defineConfig({
       // 添加 CAD API 代理，用于获取 STL 文件和测量数据
       // 匹配 /cad 路径，将请求代理到后端服务器
       '/cad': {
-        target: 'http://192.168.4.16:29999',
+        target: 'http://localhost:29999',
         changeOrigin: true,
         secure: false,
         ws: false,
         configure: (proxy, _options) => {
           proxy.on('proxyReq', (proxyReq, req, _res) => {
-            console.log(`[代理] CAD 请求: ${req.url} -> http://192.168.4.16:29999${proxyReq.path}`);
+            console.log(`[代理] CAD 请求: ${req.url} -> http://localhost:29999${proxyReq.path}`);
           });
           proxy.on('error', (err, req, res) => {
             console.error(`[代理] CAD 代理错误:`, err.message);

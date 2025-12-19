@@ -31,6 +31,7 @@
         ref="mainViewerRef"
         :series-instance-u-i-d="seriesInstanceUID"
         :current-phase="currentPhase"
+        :current-module="currentModule"
         :all-series-u-i-ds="config.seriesInstanceUIDs"
         :geometric-data="currentGeoData"
       />

@@ -210,9 +210,9 @@ export function useApp(seriesInstanceUIDs = null, studyInstanceUIDParam = null) 
       
       // 更新为包含所有平面数据的对象
       currentGeoData.value = {
-        inflow: extractPlaneData(data['Stent_Frame_Base_plane']),
+        inflow: extractPlaneData(data['Stent_Frame_base_up_0.5_plane']),
         nadir: extractPlaneData(data['Stent_Frame_base_up_1.0_plane']),
-        commissure: extractPlaneData(data['Stent_Frame_Crown_Frame_plane'])
+        commissure: extractPlaneData(data['Stent_Frame_base_up_1.5_plane'])
       };
       
     } catch (error) {

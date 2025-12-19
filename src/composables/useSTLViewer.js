@@ -152,6 +152,9 @@ export function useSTLViewer() {
       // 添加到场景
       renderer.addActor(actor);
       
+      // 延迟一下，确保 actor 完全添加到场景后再继续
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
       // 保存引用
       const fileKey = `${phase}_${file.name}`;
       fileStates.value[fileKey] = {
@@ -188,6 +191,32 @@ export function useSTLViewer() {
   function clearCache() {
     stlCache.clear();
     console.log('STL 文件缓存已清理');
+  }
+
+  /**
+   * 安全的渲染函数，检查 WebGL 上下文状态
+   */
+  function safeRender(renderWindow) {
+    if (!renderWindow) return;
+    
+    try {
+      const views = renderWindow.getViews();
+      if (views.length > 0) {
+        const glWindow = views[0];
+        const canvas = glWindow.getCanvas ? glWindow.getCanvas() : null;
+        if (canvas) {
+          const gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
+          if (!gl || gl.isContextLost()) {
+            console.warn('WebGL 上下文丢失或无效，跳过渲染');
+            return;
+          }
+        }
+      }
+      renderWindow.render();
+    } catch (error) {
+      console.error('渲染失败:', error);
+      // 不抛出错误，避免中断流程
+    }
   }
 
   /**
@@ -267,8 +296,8 @@ export function useSTLViewer() {
       context.value.renderer.addActor(actor);
       planeActor.value = actor;
 
-      // 渲染
-      context.value.renderWindow.render();
+      // 安全渲染
+      safeRender(context.value.renderWindow);
 
       console.log('定位平面已显示');
     } catch (error) {
@@ -284,7 +313,7 @@ export function useSTLViewer() {
       context.value.renderer.removeActor(planeActor.value);
       planeActor.value.delete();
       planeActor.value = null;
-      context.value.renderWindow.render();
+      safeRender(context.value.renderWindow);
       console.log('定位平面已隐藏');
     }
   }
@@ -336,8 +365,8 @@ export function useSTLViewer() {
       planeSource.modified();
       planeActor.value.modified();
       
-      // 渲染
-      context.value.renderWindow.render();
+      // 安全渲染
+      safeRender(context.value.renderWindow);
     } catch (error) {
       console.error('更新平面位置失败:', error);
     }
@@ -394,7 +423,10 @@ export function useSTLViewer() {
         renderer.resetCamera()
         hasResetCameraOnce = true
       }
-      renderWindow.render()
+      
+      // 延迟渲染，确保所有资源都已加载完成
+      await new Promise(resolve => setTimeout(resolve, 50));
+      safeRender(renderWindow)
       
       loading.value = false;
       progress.value = 100;
@@ -421,7 +453,7 @@ export function useSTLViewer() {
       state.visible = visible;
       state.actor.setVisibility(visible);
       if (context.value) {
-        context.value.renderWindow.render();
+        safeRender(context.value.renderWindow);
       }
     }
   }
@@ -475,6 +507,22 @@ export function useSTLViewer() {
         if (glWindow.setPreserveDrawingBuffer) {
            glWindow.setPreserveDrawingBuffer(true);
         }
+        
+        // 确保 WebGL 上下文已准备好
+        const canvas = glWindow.getCanvas ? glWindow.getCanvas() : null;
+        if (canvas) {
+          const gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
+          if (!gl) {
+            throw new Error('无法获取 WebGL 上下文');
+          }
+          // 等待 WebGL 上下文完全初始化
+          await new Promise(resolve => {
+            // 使用 requestAnimationFrame 确保上下文准备好
+            requestAnimationFrame(() => {
+              requestAnimationFrame(resolve);
+            });
+          });
+        }
       }
 
       // 保存上下文
@@ -508,7 +556,7 @@ export function useSTLViewer() {
               await new Promise(resolve => setTimeout(resolve, 0))
             }
           }
-          renderWindow.render()
+          safeRender(renderWindow)
           console.log(`后台构建 ${otherPhase} 完成`)
         } catch (e) {
           console.warn(`后台构建 ${otherPhase} 失败:`, e)
@@ -621,7 +669,7 @@ export function useSTLViewer() {
         console.log('尝试 view.captureNextImage()');
         try {
           const capturePromise = view.captureNextImage('image/png');
-          renderWindow.render(); // 关键：触发渲染以执行捕获
+          safeRender(renderWindow); // 关键：触发渲染以执行捕获
           
           // 添加超时处理，防止 Promise 永远不 resolve
           const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1000));
@@ -652,7 +700,7 @@ export function useSTLViewer() {
       // 我们尝试在渲染后立即捕获
       if (view && view.getCanvas) {
          console.log('尝试 canvas.toDataURL()');
-         renderWindow.render();
+         safeRender(renderWindow);
          // 稍微等待渲染完成，但不要太久以免buffer被清除
          await new Promise(r => setTimeout(r, 20));
          const canvas = view.getCanvas();

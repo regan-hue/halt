@@ -160,6 +160,7 @@ import { getRenderingEngine } from '@cornerstonejs/core'
 const props = defineProps({
   seriesInstanceUID: { type: String, required: true },
   currentPhase: { type: String, default: '收缩期' },
+  currentModule: { type: String, default: 'geometric' }, // 当前模块
   allSeriesUIDs: { type: Object, default: () => ({}) }, // 所有期相的UID映射
   geometricData: { type: Object, default: null },
 })
@@ -556,7 +557,7 @@ onBeforeUnmount(() => {
 // 暴露方法给父组件
 defineExpose({
   async locatePlane(analysisType) {
-    const result = await locatePlane(analysisType);
+    const result = await locatePlane(analysisType, props.currentModule);
     if (result.success) {
       showSTLPlane(result.less_points);
     }

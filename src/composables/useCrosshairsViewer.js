@@ -129,6 +129,13 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
   const volumeCache = {}; // 缓存已加载的体积数据 {seriesUID: {volumeId, imageIds}}
   let savedPlaneState = null; // 保存的平面定位状态（用于期相切换时保持平面）
   let lastCameraState = null; // 保存最后的相机状态（用于切换期相时保持MPR视图）
+  let planeAnnotationsUIDs = []; // 保存平面绘图的annotation UIDs，用于清除
+  let diameterAnnotationsUIDs = []; // 保存最长径最短径的annotation UIDs，用于单独清除
+  let curveAnnotationsUIDs = []; // 保存曲线的annotation UIDs
+  let currentAnalysisType = null; // 当前分析类型
+  let cameraModifiedListeners = []; // 保存相机变化监听器，用于清除
+  let planeGeometryVisible = false; // 标记平面几何是否可见
+  let cameraChangeHandler = null; // 保存相机变化处理函数引用
   
   // Wave Image 相关
   let axialContainer = null;
@@ -1007,7 +1014,21 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
           // 延迟一点，确保体积已完全加载
           await new Promise(resolve => setTimeout(resolve, 100))
           await applyPlanePosition(savedPlaneState.less_points)
-          console.log('平面状态已恢复到新期相')
+          
+          // 重新绘制平面几何，传递保存的模块类型
+          const moduleType = savedPlaneState.moduleType || 'geometric';
+          drawPlaneGeometry({
+            less_points: savedPlaneState.less_points,
+            max_dist_pair: savedPlaneState.max_dist_pair,
+            min_dist_pair: savedPlaneState.min_dist_pair
+          }, moduleType);
+          
+          // 如果是 geometric 模块且绘制了几何图形，重新设置监听器
+          if (moduleType === 'geometric' && planeGeometryVisible) {
+            setupPlaneGeometryCameraListener();
+          }
+          
+          console.log('平面状态和几何图形已恢复到新期相')
         } catch (err) {
           console.error('恢复平面状态失败:', err)
         }
@@ -1031,6 +1052,9 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
       eventTarget.removeEventListener(ToolsEnums.Events.ANNOTATION_ADDED, onAnnotationAdded);
       eventTarget.removeEventListener(ToolsEnums.Events.ANNOTATION_REMOVED, onAnnotationRemoved);
       measurementHistory.value = [];
+
+      // 移除相机变化监听器
+      removePlaneGeometryCameraListener();
 
       const viewportIds = {
         axial: 'axial-viewport',
@@ -1072,11 +1096,15 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
       // 清理缓存
       cache.purgeCache()
       
+      // 清除平面标注
+      clearPlaneAnnotations();
+      
       // 重置状态
       renderingEngine = null
       viewportIds = null
       currentVolumeId = null
       savedPlaneState = null
+      currentAnalysisType = null
       // 清空体积缓存
       Object.keys(volumeCache).forEach(key => delete volumeCache[key])
     } catch (err) {
@@ -1116,6 +1144,10 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
     try {
       // 清除保存的平面状态
       savedPlaneState = null;
+      currentAnalysisType = null;
+      
+      // 移除相机变化监听器
+      removePlaneGeometryCameraListener();
       
       // 重置所有viewport的相机到默认状态
       Object.keys(viewportIds).forEach(viewName => {
@@ -1139,6 +1171,10 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
         viewportIds.sagittal,
         viewportIds.coronal,
       ]);
+      
+      // 清除平面标注
+      clearPlaneAnnotations();
+      
       console.log('已重置MPR相机到默认状态，并清除平面状态');
     } catch (err) {
       console.error('重置MPR相机失败:', err);
@@ -1146,15 +1182,448 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
   }
 
   /**
-   * 根据分析类型定位到特定平面
+   * 清除平面标注
    */
-  async function locatePlane(analysisType) {
+  function clearPlaneAnnotations() {
+    if (planeAnnotationsUIDs.length === 0 && diameterAnnotationsUIDs.length === 0 && curveAnnotationsUIDs.length === 0) return;
+    
+    try {
+      const annotationState = annotation.state;
+      
+      // 清除所有平面标注（包括曲线）
+      planeAnnotationsUIDs.forEach(uid => {
+        try {
+          annotationState.removeAnnotation(uid);
+        } catch (err) {
+          console.warn('移除annotation失败:', uid, err);
+        }
+      });
+      planeAnnotationsUIDs = [];
+      
+      // 清除直径标注
+      diameterAnnotationsUIDs.forEach(uid => {
+        try {
+          annotationState.removeAnnotation(uid);
+        } catch (err) {
+          console.warn('移除直径annotation失败:', uid, err);
+        }
+      });
+      diameterAnnotationsUIDs = [];
+      
+      // 清除曲线标注
+      curveAnnotationsUIDs.forEach(uid => {
+        try {
+          annotationState.removeAnnotation(uid);
+        } catch (err) {
+          console.warn('移除曲线annotation失败:', uid, err);
+        }
+      });
+      curveAnnotationsUIDs = [];
+      
+      // 重置可见标志
+      planeGeometryVisible = false;
+      
+      console.log('已清除平面标注');
+      
+      // 刷新所有视图
+      if (renderingEngine && viewportIds) {
+        renderingEngine.renderViewports([
+          viewportIds.axial,
+          viewportIds.sagittal,
+          viewportIds.coronal
+        ]);
+      }
+    } catch (err) {
+      console.error('清除平面标注失败:', err);
+    }
+  }
+  
+  /**
+   * 清除直径标注（最长径和最短径）
+   */
+  function clearDiameterAnnotations() {
+    if (diameterAnnotationsUIDs.length === 0) return;
+    
+    try {
+      const annotationState = annotation.state;
+      diameterAnnotationsUIDs.forEach(uid => {
+        try {
+          annotationState.removeAnnotation(uid);
+        } catch (err) {
+          console.warn('移除直径annotation失败:', uid, err);
+        }
+      });
+      diameterAnnotationsUIDs = [];
+      console.log('已清除直径标注');
+      
+      // 刷新所有视图
+      if (renderingEngine && viewportIds) {
+        renderingEngine.renderViewports([
+          viewportIds.axial,
+          viewportIds.sagittal,
+          viewportIds.coronal
+        ]);
+      }
+    } catch (err) {
+      console.error('清除直径标注失败:', err);
+    }
+  }
+
+  /**
+   * 设置相机变化监听器
+   * 当MPR位置变化时，隐藏平面几何图形
+   */
+  function setupPlaneGeometryCameraListener() {
+    if (!renderingEngine || !viewportIds) return;
+    
+    // 如果已有监听器，先移除
+    removePlaneGeometryCameraListener();
+    
+    // 创建相机变化处理函数
+    cameraChangeHandler = throttle(() => {
+      // 只有当几何图形可见时才需要隐藏
+      if (planeGeometryVisible) {
+        console.log('检测到相机变化，隐藏平面几何图形');
+        clearPlaneAnnotations();
+      }
+    }, 100); // 100ms节流
+    
+    // 为所有视图添加相机变化监听
+    try {
+      ['axial', 'sagittal', 'coronal'].forEach(viewName => {
+        try {
+          const viewport = renderingEngine.getViewport(viewportIds[viewName]);
+          if (viewport && viewport.element) {
+            viewport.element.addEventListener(Enums.Events.CAMERA_MODIFIED, cameraChangeHandler);
+            console.log(`已为 ${viewName} 视图添加相机变化监听`);
+          }
+        } catch (e) {
+          console.warn(`为 ${viewName} 添加相机监听失败:`, e);
+        }
+      });
+    } catch (err) {
+      console.error('设置相机变化监听器失败:', err);
+    }
+  }
+
+  /**
+   * 移除相机变化监听器
+   */
+  function removePlaneGeometryCameraListener() {
+    if (!cameraChangeHandler || !renderingEngine || !viewportIds) return;
+    
+    try {
+      ['axial', 'sagittal', 'coronal'].forEach(viewName => {
+        try {
+          const viewport = renderingEngine.getViewport(viewportIds[viewName]);
+          if (viewport && viewport.element) {
+            viewport.element.removeEventListener(Enums.Events.CAMERA_MODIFIED, cameraChangeHandler);
+          }
+        } catch (e) {
+          console.warn(`移除 ${viewName} 相机监听失败:`, e);
+        }
+      });
+      console.log('已移除相机变化监听器');
+    } catch (err) {
+      console.error('移除相机变化监听器失败:', err);
+    }
+    
+    cameraChangeHandler = null;
+  }
+
+  /**
+   * 在图像上绘制平面几何（less_points曲线、最长径、最短径）
+   * 只在支架几何形态评估模块（geometric）显示
+   */
+  function drawPlaneGeometry(planeData, moduleType = 'geometric') {
     if (!renderingEngine || !viewportIds) {
       console.error('渲染引擎未初始化');
       return;
     }
 
+    // 只在支架几何形态评估模块显示
+    if (moduleType !== 'geometric') {
+      console.log('非支架几何形态评估模块，跳过绘制平面几何');
+      return;
+    }
+
+    // 先清除之前的标注
+    clearPlaneAnnotations();
+
+    const { less_points, max_dist_pair, min_dist_pair } = planeData;
+    
+    if (!less_points || !Array.isArray(less_points) || less_points.length === 0) {
+      console.warn('less_points数据无效');
+      return;
+    }
+
     try {
+      // 在所有三个视图中绘制
+      const viewportIdsArray = [viewportIds.axial, viewportIds.sagittal, viewportIds.coronal];
+      
+      viewportIdsArray.forEach(viewportId => {
+        const viewport = renderingEngine.getViewport(viewportId);
+        if (!viewport) return;
+        
+        const camera = viewport.getCamera();
+        const viewPlaneNormal = camera.viewPlaneNormal || [0, 0, -1];
+        const viewUp = camera.viewUp || [0, -1, 0];
+        
+        // 1. 绘制less_points组成的曲线（用连续的线段）- 绿色
+        console.log(`在视图 ${viewportId} 绘制less_points曲线，点数:`, less_points.length);
+        for (let i = 0; i < less_points.length - 1; i++) {
+          const point1 = less_points[i];
+          const point2 = less_points[i + 1];
+          
+          const annotationUID = `plane_curve_${viewportId}_${Date.now()}_${i}`;
+          const newAnnotation = {
+            annotationUID,
+            highlighted: false,
+            invalidated: false,
+            metadata: {
+              viewPlaneNormal: [...viewPlaneNormal],
+              viewUp: [...viewUp],
+              FrameOfReferenceUID: viewport.getFrameOfReferenceUID?.() || '',
+              referencedImageId: '',
+              toolName: 'Length',
+            },
+            data: {
+              handles: {
+                points: [[...point1], [...point2]],
+                activeHandleIndex: null,
+                textBox: {
+                  hasMoved: false,
+                  worldPosition: [0, 0, 0],
+                  worldBoundingBox: {
+                    topLeft: [0, 0, 0],
+                    topRight: [0, 0, 0],
+                    bottomLeft: [0, 0, 0],
+                    bottomRight: [0, 0, 0],
+                  }
+                }
+              },
+              label: '', // 不显示标签
+              cachedStats: {}
+            },
+            isLocked: true, // 锁定，不允许编辑
+            isVisible: true,
+            // 自定义样式（存储在顶层，用于后续处理）
+            customStyle: {
+              color: 'rgb(0, 255, 0)', // 绿色
+              lineWidth: 2,
+              lineDash: '' // 实线
+            }
+          };
+          
+          annotation.state.addAnnotation(newAnnotation, viewportId);
+          planeAnnotationsUIDs.push(annotationUID);
+          curveAnnotationsUIDs.push(annotationUID);
+        }
+
+        // 2. 绘制最长径 - 黄色虚线
+        if (max_dist_pair && Array.isArray(max_dist_pair) && max_dist_pair.length === 2) {
+          console.log(`在视图 ${viewportId} 绘制最长径`);
+          const annotationUID = `plane_max_diameter_${viewportId}_${Date.now()}`;
+          
+          const newAnnotation = {
+            annotationUID,
+            highlighted: false,
+            invalidated: false,
+            metadata: {
+              viewPlaneNormal: [...viewPlaneNormal],
+              viewUp: [...viewUp],
+              FrameOfReferenceUID: viewport.getFrameOfReferenceUID?.() || '',
+              referencedImageId: '',
+              toolName: 'Length',
+            },
+            data: {
+              handles: {
+                points: [[...max_dist_pair[0]], [...max_dist_pair[1]]],
+                activeHandleIndex: null,
+                textBox: {
+                  hasMoved: false,
+                  worldPosition: [0, 0, 0],
+                  worldBoundingBox: {
+                    topLeft: [0, 0, 0],
+                    topRight: [0, 0, 0],
+                    bottomLeft: [0, 0, 0],
+                    bottomRight: [0, 0, 0],
+                  }
+                }
+              },
+              label: '', // 不显示标签
+              cachedStats: {}
+            },
+            isLocked: true,
+            isVisible: true,
+            // 自定义样式（存储在顶层，用于后续处理）
+            customStyle: {
+              color: 'rgb(255, 255, 0)', // 黄色
+              lineWidth: 2,
+              lineDash: '4,4' // 虚线
+            }
+          };
+          
+          annotation.state.addAnnotation(newAnnotation, viewportId);
+          planeAnnotationsUIDs.push(annotationUID);
+          diameterAnnotationsUIDs.push(annotationUID);
+        }
+
+        // 3. 绘制最短径 - 黄色虚线
+        if (min_dist_pair && Array.isArray(min_dist_pair) && min_dist_pair.length === 2) {
+          console.log(`在视图 ${viewportId} 绘制最短径`);
+          const annotationUID = `plane_min_diameter_${viewportId}_${Date.now()}`;
+          
+          const newAnnotation = {
+            annotationUID,
+            highlighted: false,
+            invalidated: false,
+            metadata: {
+              viewPlaneNormal: [...viewPlaneNormal],
+              viewUp: [...viewUp],
+              FrameOfReferenceUID: viewport.getFrameOfReferenceUID?.() || '',
+              referencedImageId: '',
+              toolName: 'Length',
+            },
+            data: {
+              handles: {
+                points: [[...min_dist_pair[0]], [...min_dist_pair[1]]],
+                activeHandleIndex: null,
+                textBox: {
+                  hasMoved: false,
+                  worldPosition: [0, 0, 0],
+                  worldBoundingBox: {
+                    topLeft: [0, 0, 0],
+                    topRight: [0, 0, 0],
+                    bottomLeft: [0, 0, 0],
+                    bottomRight: [0, 0, 0],
+                  }
+                }
+              },
+              label: '', // 不显示标签
+              cachedStats: {}
+            },
+            isLocked: true,
+            isVisible: true,
+            // 自定义样式（存储在顶层，用于后续处理）
+            customStyle: {
+              color: 'rgb(255, 255, 0)', // 黄色
+              lineWidth: 2,
+              lineDash: '4,4' // 虚线
+            }
+          };
+          
+          annotation.state.addAnnotation(newAnnotation, viewportId);
+          planeAnnotationsUIDs.push(annotationUID);
+          diameterAnnotationsUIDs.push(annotationUID);
+        }
+      });
+
+      console.log(`绘制完成，共创建 ${planeAnnotationsUIDs.length} 个标注`);
+      
+      // 标记几何图形可见
+      planeGeometryVisible = true;
+      
+      // 刷新所有视图
+      renderingEngine.renderViewports([
+        viewportIds.axial,
+        viewportIds.sagittal,
+        viewportIds.coronal
+      ]);
+      
+      // 延迟应用自定义样式（等待 SVG 渲染完成）
+      setTimeout(() => {
+        applyCustomStylesToAnnotations();
+      }, 100);
+      
+    } catch (err) {
+      console.error('绘制平面几何失败:', err);
+    }
+  }
+
+  /**
+   * 应用自定义样式到 annotations 的 SVG 元素
+   */
+  function applyCustomStylesToAnnotations() {
+    if (!renderingEngine || !viewportIds) return;
+    
+    try {
+      ['axial', 'sagittal', 'coronal'].forEach(viewName => {
+        try {
+          const viewport = renderingEngine.getViewport(viewportIds[viewName]);
+          if (!viewport || !viewport.element) return;
+          
+          // 获取 SVG layer
+          const svgLayer = viewport.element.querySelector('.cornerstone-canvas-wrapper svg, .viewport-element svg, svg');
+          if (!svgLayer) {
+            console.warn(`未找到 ${viewName} 的 SVG layer`);
+            return;
+          }
+          
+          // 遍历所有自定义样式的 annotations
+          [...curveAnnotationsUIDs, ...diameterAnnotationsUIDs].forEach(annotationUID => {
+            try {
+              // 获取 annotation 对象
+              const ann = annotation.state.getAnnotation(annotationUID);
+              if (!ann || !ann.customStyle) return;
+              
+              // 查找对应的 SVG 元素（通过 data-annotation-uid 或其他属性）
+              const svgElements = svgLayer.querySelectorAll(`[data-uid="${annotationUID}"], g[data-tool="Length"]`);
+              if (svgElements.length === 0) return;
+              
+              // 应用自定义样式
+              svgElements.forEach(svgElement => {
+                // 查找 line 或 path 元素
+                const lines = svgElement.querySelectorAll('line, path, polyline');
+                lines.forEach(line => {
+                  if (ann.customStyle.color) {
+                    line.setAttribute('stroke', ann.customStyle.color);
+                  }
+                  if (ann.customStyle.lineWidth) {
+                    line.setAttribute('stroke-width', ann.customStyle.lineWidth);
+                  }
+                  if (ann.customStyle.lineDash) {
+                    line.setAttribute('stroke-dasharray', ann.customStyle.lineDash);
+                  }
+                });
+                
+                // 隐藏文本标签（如果有）
+                const texts = svgElement.querySelectorAll('text');
+                texts.forEach(text => {
+                  text.style.display = 'none';
+                });
+              });
+            } catch (e) {
+              console.warn(`应用样式到 annotation ${annotationUID} 失败:`, e);
+            }
+          });
+        } catch (e) {
+          console.warn(`处理 ${viewName} 视图的样式失败:`, e);
+        }
+      });
+    } catch (err) {
+      console.error('应用自定义样式失败:', err);
+    }
+  }
+
+  /**
+   * 根据分析类型定位到特定平面
+   * @param {string} analysisType - 分析类型（inflow、nadir、commissure等）
+   * @param {string} moduleType - 模块类型（默认为 geometric）
+   */
+  async function locatePlane(analysisType, moduleType = null) {
+    if (!renderingEngine || !viewportIds) {
+      console.error('渲染引擎未初始化');
+      return;
+    }
+
+    // 确定模块类型（优先使用参数，其次使用 props.currentModule）
+    const actualModuleType = moduleType || props.currentModule || 'geometric';
+    
+    try {
+      // 保存当前分析类型
+      currentAnalysisType = analysisType;
+      
       // 读取收缩期与舒张期两个 measurement.json（优先使用与当前期相同的文件）
       const [dataS, dataD] = await Promise.all([
         fetchJSONFile('measurement.json', '收缩期').catch(() => null),
@@ -1185,7 +1654,7 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
         return;
       }
 
-      console.log('[locatePlane] analysisType=', analysisType, 'currentPhase=', props.currentPhase);
+      console.log('[locatePlane] analysisType=', analysisType, 'moduleType=', actualModuleType, 'currentPhase=', props.currentPhase);
       // 先尝试在与当前期相同的文件中查找目标平面，其次查另一个文件
       const phase = props.currentPhase || '收缩期';
       const preferSystole = phase === '收缩期';
@@ -1215,14 +1684,47 @@ export function useCrosshairsViewer(props, allSeriesUIDs = null) {
       try {
         await applyPlanePosition(less_points);
         
+        // 规范化max_dist_pair和min_dist_pair为数字数组
+        let max_dist_pair = planeData.max_dist_pair;
+        let min_dist_pair = planeData.min_dist_pair;
+        
+        if (max_dist_pair && Array.isArray(max_dist_pair)) {
+          max_dist_pair = max_dist_pair.map(pt => {
+            if (!Array.isArray(pt)) return null;
+            return pt.map(v => (typeof v === 'string' ? Number(v) : v));
+          }).filter(Boolean);
+        }
+        
+        if (min_dist_pair && Array.isArray(min_dist_pair)) {
+          min_dist_pair = min_dist_pair.map(pt => {
+            if (!Array.isArray(pt)) return null;
+            return pt.map(v => (typeof v === 'string' ? Number(v) : v));
+          }).filter(Boolean);
+        }
+        
+        // 绘制平面几何（曲线、最长径、最短径）- 只在 geometric 模块显示
+        drawPlaneGeometry({
+          less_points,
+          max_dist_pair,
+          min_dist_pair
+        }, actualModuleType);
+        
+        // 设置相机变化监听器（只在 geometric 模块且绘制了几何图形时）
+        if (actualModuleType === 'geometric' && planeGeometryVisible) {
+          setupPlaneGeometryCameraListener();
+        }
+        
         // 保存平面状态，用于期相切换时保持平面
         savedPlaneState = {
           analysisType,
           less_points,
-          targetPlaneKey
+          max_dist_pair,
+          min_dist_pair,
+          targetPlaneKey,
+          moduleType: actualModuleType
         }
-        console.log('定位平面成功，已保存平面状态');
-        return { success: true, less_points };
+        console.log('定位平面成功，已保存平面状态并绘制几何图形');
+        return { success: true, less_points, max_dist_pair, min_dist_pair };
       } catch (err) {
         console.error('[locatePlane] applyPlanePosition 失败', err);
         throw err;

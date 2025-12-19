@@ -98,11 +98,13 @@ class CustomOrientationMarkerTool extends AnnotationTool {
       renderer.setBackground(0, 0, 0);
       renderWindow.addRenderer(renderer);
 
-      // 配置 OpenGL 渲染窗口，强制使用 WebGL 1 以避免 GLSL ES 300 兼容性问题
-      const openglRenderWindow = vtkOpenGLRenderWindow.newInstance({
-        webgl2: false // 强制使用 WebGL 1
-      });
+      // 配置 OpenGL 渲染窗口
+      // 注意：VTK.js 的 vtkOpenGLRenderWindow 在创建时会自动选择 WebGL 版本
+      // 如果遇到 WebGL 2 着色器错误，我们会在渲染时捕获并处理
+      const openglRenderWindow = vtkOpenGLRenderWindow.newInstance();
       renderWindow.addView(openglRenderWindow);
+      
+      // 设置容器 - VTK.js 会创建 canvas 和 WebGL 上下文
       openglRenderWindow.setContainer(container);
 
       const { width, height } = container.getBoundingClientRect();
@@ -147,7 +149,52 @@ class CustomOrientationMarkerTool extends AnnotationTool {
 
       renderer.addActor(actor);
       renderer.resetCamera();
-      renderWindow.render();
+      
+      // 在渲染时捕获可能的 WebGL shader 编译错误
+      // 如果遇到 GLSL ES 300 错误（WebGL 2 shader），静默失败并隐藏方向标记
+      // 使用 try-catch 包装，确保错误不会影响主应用的 STL 显示
+      try {
+        renderWindow.render();
+      } catch (error) {
+        const errorMessage = error?.message || error?.toString() || '';
+        const errorStack = error?.stack || '';
+        
+        // 检查是否是 WebGL shader 编译错误（包括 GLSL ES 300）
+        const isShaderError = errorMessage.includes('GLSL') || 
+            errorMessage.includes('shader') || 
+            errorMessage.includes('WebGL') ||
+            errorMessage.includes('#version 300') ||
+            errorStack.includes('GLSL') ||
+            errorStack.includes('shader') ||
+            errorStack.includes('#version 300');
+        
+        if (isShaderError) {
+          console.warn('方向标记渲染失败（WebGL shader 兼容性问题），已禁用:', errorMessage.substring(0, 150));
+          // 隐藏方向标记容器，避免影响主应用
+          container.style.display = 'none';
+          // 清理资源
+          try {
+            if (renderer && actor) {
+              renderer.removeActor(actor);
+            }
+            if (openglRenderWindow) {
+              openglRenderWindow.delete();
+            }
+          } catch (cleanupError) {
+            // 忽略清理错误
+          }
+          // 标记这个 widget 为失败状态，避免后续尝试渲染
+          this.orientationWidgets.set(element, {
+            container,
+            renderFailed: true
+          });
+          // 提前返回，不保存成功的引用
+          return;
+        } else {
+          // 其他类型的错误，记录但不隐藏
+          console.error('方向标记渲染时出错:', error);
+        }
+      }
 
       // 保存引用
       this.orientationWidgets.set(element, {
@@ -170,6 +217,11 @@ class CustomOrientationMarkerTool extends AnnotationTool {
   updateOrientationWidget(element, viewport) {
     const widget = this.orientationWidgets.get(element);
     if (!widget) return;
+    
+    // 如果之前渲染失败，跳过更新
+    if (widget.renderFailed) {
+      return;
+    }
 
     try {
       // 检查元素的可见性和尺寸
@@ -202,7 +254,21 @@ class CustomOrientationMarkerTool extends AnnotationTool {
         widgetCamera.setViewUp(...camera.viewUp);
 
         widget.renderer.resetCamera();
-        widget.renderWindow.render();
+        
+        // 捕获渲染错误，如果是 WebGL shader 错误，标记为失败
+        try {
+          widget.renderWindow.render();
+        } catch (renderError) {
+          const errorMessage = renderError?.message || renderError?.toString() || '';
+          if (errorMessage.includes('GLSL') || 
+              errorMessage.includes('shader') || 
+              errorMessage.includes('WebGL') ||
+              errorMessage.includes('#version 300')) {
+            console.warn('方向标记更新渲染失败（WebGL shader 兼容性问题）');
+            widget.renderFailed = true;
+            widget.container.style.display = 'none';
+          }
+        }
       }
     } catch (error) {
       // 静默失败，避免在控制台产生过多噪音
